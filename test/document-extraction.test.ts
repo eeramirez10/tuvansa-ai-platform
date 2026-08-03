@@ -26,7 +26,7 @@ import {
 const PROMPT_VERSIONS = {
   quoteDocument: "quote-items-v1",
   quotedExcel: "quoted-excel-v1",
-  supplierQuote: "supplier-quote-v3",
+  supplierQuote: "supplier-quote-v4",
 };
 
 class FakeQueue implements JobQueuePort {
@@ -205,7 +205,7 @@ test("reprocesses the same supplier file after its extractor version changes", a
   assert.equal(queue.messages.length, 2);
   assert.deepEqual(repository.inputs.map((input) => input.promptVersion), [
     "supplier-quote-v1",
-    "supplier-quote-v3",
+    "supplier-quote-v4",
   ]);
 });
 

@@ -25,6 +25,7 @@ export interface SupplierQuoteExtractedContact {
   channel: "EMAIL" | "PHONE";
   value: string;
   phoneKind: "LANDLINE" | "MOBILE" | "UNKNOWN" | null;
+  extension: string | null;
   isWhatsApp: boolean;
   contactName: string | null;
   label: string | null;
@@ -38,6 +39,7 @@ export interface SupplierQuoteResult {
     name: string | null;
     taxId: string | null;
     state: string | null;
+    country: string | null;
     contactName: string | null;
     email: string | null;
     phone: string | null;
