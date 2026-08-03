@@ -14,7 +14,7 @@ export interface SemanticCatalogMatch {
   semanticSimilarity: number;
   finalSimilarity: number;
   confidence: "high" | "medium" | "low";
-  rankingStrategy: "SEMANTIC_ONLY";
+  rankingStrategy: string;
   reasons: string[];
 }
 

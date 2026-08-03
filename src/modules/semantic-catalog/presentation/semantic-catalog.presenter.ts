@@ -22,14 +22,33 @@ export class SemanticCatalogPresenter {
     request: SemanticSearchRequestProps,
     result: SearchSemanticCatalogResult,
   ) {
+    return this.vectorResponse("proscai-catalog-v2-semantic", index, request, result, true);
+  }
+
+  public static hybridVectorSearch(
+    index: string,
+    request: SemanticSearchRequestProps,
+    result: SearchSemanticCatalogResult,
+  ) {
+    return this.vectorResponse("proscai-catalog-v2", index, request, result, false);
+  }
+
+  private static vectorResponse(
+    source: "proscai-catalog-v2" | "proscai-catalog-v2-semantic",
+    index: string,
+    request: SemanticSearchRequestProps,
+    result: SearchSemanticCatalogResult,
+    semanticOnly: boolean,
+  ) {
     return {
-      source: "proscai-catalog-v2-semantic",
+      source,
       index,
       query: request.query,
       branchCode: request.branchCode,
       topK: request.limit,
       filters: request.filters,
-      rankingStrategy: "SEMANTIC_ONLY",
+      ...(semanticOnly ? { rankingStrategy: "SEMANTIC_ONLY" } : {}),
+      ...(result.parsedQuery ? { parsedQuery: result.parsedQuery } : {}),
       availabilityStatus: result.availabilityStatus,
       availabilityError: result.availabilityError,
       itemsCount: result.matches.length,
@@ -45,10 +64,10 @@ export class SemanticCatalogPresenter {
           originalDescription: this.metadataText(match.metadata, "originalDescription"),
           semanticSimilarity: this.round(match.semanticSimilarity),
           semanticSimilarityPercent: this.percent(match.semanticSimilarity),
-          finalSimilarity: this.round(match.semanticSimilarity),
-          finalSimilarityPercent: this.percent(match.semanticSimilarity),
-          similarity: this.round(match.semanticSimilarity),
-          similarityPercent: this.percent(match.semanticSimilarity),
+          finalSimilarity: this.round(match.finalSimilarity),
+          finalSimilarityPercent: this.percent(match.finalSimilarity),
+          similarity: this.round(match.finalSimilarity),
+          similarityPercent: this.percent(match.finalSimilarity),
           confidence: match.confidence,
           rankingStrategy: match.rankingStrategy,
           reasons: match.reasons,
@@ -69,6 +88,23 @@ export class SemanticCatalogPresenter {
     request: SemanticSearchRequestProps,
     result: SearchSemanticCatalogResult,
   ) {
+    return this.quoteResponse("proscai-catalog-v2-semantic", index, request, result);
+  }
+
+  public static hybridQuoteSearch(
+    index: string,
+    request: SemanticSearchRequestProps,
+    result: SearchSemanticCatalogResult,
+  ) {
+    return this.quoteResponse("proscai-catalog-v2", index, request, result);
+  }
+
+  private static quoteResponse(
+    source: "proscai-catalog-v2" | "proscai-catalog-v2-semantic",
+    index: string,
+    request: SemanticSearchRequestProps,
+    result: SearchSemanticCatalogResult,
+  ) {
     const branchCode = request.branchCode!;
     const items: Array<
       ReturnType<typeof SemanticCatalogPresenter.quoteItem>
@@ -78,7 +114,7 @@ export class SemanticCatalogPresenter {
       const availability = result.availabilityByEan.get(match.ean) ?? null;
       const codes = availability?.codes ?? [];
       if (codes.length === 0) {
-        items.push(this.unresolvedQuoteItem(match, branchCode));
+        items.push(this.unresolvedQuoteItem(match, branchCode, source));
         continue;
       }
 
@@ -89,11 +125,11 @@ export class SemanticCatalogPresenter {
           const rightRequested = right.homeBranchCode === branchCode ? 1 : 0;
           return rightRequested - leftRequested || left.icod.localeCompare(right.icod);
         })
-        .map((code) => this.quoteItem(match, code, branchCode, eanTotalStock)));
+        .map((code) => this.quoteItem(match, code, branchCode, eanTotalStock, source)));
     }
 
     return {
-      source: "proscai-catalog-v2-semantic",
+      source,
       index,
       query: request.query,
       branchCode,
@@ -110,6 +146,7 @@ export class SemanticCatalogPresenter {
     code: ProductCodeAvailability,
     requestedBranchCode: string,
     eanTotalStock: number,
+    source: "proscai-catalog-v2" | "proscai-catalog-v2-semantic",
   ) {
     const resolvedBranchCode = code.homeBranchCode ?? "";
     const resolvedBranchName = code.homeBranchName
@@ -124,7 +161,7 @@ export class SemanticCatalogPresenter {
     const originalDescription = this.metadataText(match.metadata, "originalDescription") ?? "";
 
     return {
-      ...this.quoteMatch(match, requestedBranchCode),
+      ...this.quoteMatch(match, requestedBranchCode, source),
       description,
       originalDescription,
       branchProductCode: code.icod,
@@ -153,9 +190,13 @@ export class SemanticCatalogPresenter {
     };
   }
 
-  private static unresolvedQuoteItem(match: SemanticCatalogMatch, branchCode: string) {
+  private static unresolvedQuoteItem(
+    match: SemanticCatalogMatch,
+    branchCode: string,
+    source: "proscai-catalog-v2" | "proscai-catalog-v2-semantic",
+  ) {
     return {
-      ...this.quoteMatch(match, branchCode),
+      ...this.quoteMatch(match, branchCode, source),
       description: this.metadataText(match.metadata, "normalizedDescription") ?? "",
       originalDescription: this.metadataText(match.metadata, "originalDescription") ?? "",
       branchProductCode: "",
@@ -172,17 +213,21 @@ export class SemanticCatalogPresenter {
     };
   }
 
-  private static quoteMatch(match: SemanticCatalogMatch, branchCode: string) {
+  private static quoteMatch(
+    match: SemanticCatalogMatch,
+    branchCode: string,
+    source: "proscai-catalog-v2" | "proscai-catalog-v2-semantic",
+  ) {
     return {
-      source: "proscai-catalog-v2-semantic",
+      source,
       ean: match.ean,
       productId: match.id,
       semanticSimilarity: this.round(match.semanticSimilarity),
       semanticSimilarityPercent: this.percent(match.semanticSimilarity),
-      finalSimilarity: this.round(match.semanticSimilarity),
-      finalSimilarityPercent: this.percent(match.semanticSimilarity),
-      similarity: this.round(match.semanticSimilarity),
-      similarityPercent: this.percent(match.semanticSimilarity),
+      finalSimilarity: this.round(match.finalSimilarity),
+      finalSimilarityPercent: this.percent(match.finalSimilarity),
+      similarity: this.round(match.finalSimilarity),
+      similarityPercent: this.percent(match.finalSimilarity),
       confidence: match.confidence,
       reasons: match.reasons,
       rankingStrategy: match.rankingStrategy,

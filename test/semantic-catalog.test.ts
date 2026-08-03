@@ -4,6 +4,7 @@ import { ProductAvailabilityPort } from "../src/modules/semantic-catalog/applica
 import { TextEmbeddingPort } from "../src/modules/semantic-catalog/application/ports/text-embedding.port";
 import { VectorIndexPort, VectorRecord } from "../src/modules/semantic-catalog/application/ports/vector-index.port";
 import { SemanticCatalogRankingService } from "../src/modules/semantic-catalog/application/services/semantic-catalog-ranking.service";
+import { TechnicalCatalogQueryParserService } from "../src/modules/semantic-catalog/application/services/technical-catalog-query-parser.service";
 import { LocalProductSemanticUseCase } from "../src/modules/semantic-catalog/application/use-cases/local-product-semantic.use-case";
 import { SearchSemanticCatalogUseCase } from "../src/modules/semantic-catalog/application/use-cases/search-semantic-catalog.use-case";
 import { ProductAvailability, VectorMatch } from "../src/modules/semantic-catalog/domain/semantic-catalog.types";
@@ -78,6 +79,45 @@ test("semantic ranking keeps only the highest-scoring vector for each EAN", () =
   assert.equal(ranked[0]?.ean, "750001");
   assert.equal(ranked[0]?.rankingStrategy, "SEMANTIC_ONLY");
   assert.equal(ranked[1]?.ean, "750002");
+});
+
+test("hybrid ranking favors the requested technical attributes", () => {
+  const query = TechnicalCatalogQueryParserService.parse(
+    "TUBO ACERO AL CARBON SIN COSTURA 4 PULGADAS CEDULA 40",
+  );
+  const ranked = SemanticCatalogRankingService.rankHybrid([
+    {
+      id: "pipe-6",
+      score: 0.84,
+      metadata: {
+        ean: "PIPE6",
+        product: "TUBO",
+        material: "ACERO AL CARBON",
+        diameter: "6",
+        ced: "40",
+        costura: "SIN COSTURA",
+        normalizedDescription: "TUBO ACERO 6 CED 40 SIN COSTURA",
+      },
+    },
+    {
+      id: "pipe-4",
+      score: 0.81,
+      metadata: {
+        ean: "PIPE4",
+        product: "TUBO",
+        material: "ACERO AL CARBON",
+        diameter: "4",
+        ced: "40",
+        costura: "SIN COSTURA",
+        normalizedDescription: "TUBO ACERO 4 CED 40 SIN COSTURA",
+      },
+    },
+  ], query);
+
+  assert.equal(ranked[0]?.ean, "PIPE4");
+  assert.equal(ranked[0]?.rankingStrategy, "PIPE");
+  assert.ok(ranked[0]?.reasons.includes("diameter match"));
+  assert.ok(ranked[1]?.reasons.includes("diameter mismatch"));
 });
 
 test("local product search canonicalizes accents and reuses the cached query", async () => {

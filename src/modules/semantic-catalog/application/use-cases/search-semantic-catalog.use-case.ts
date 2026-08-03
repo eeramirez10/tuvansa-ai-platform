@@ -2,11 +2,13 @@ import { ProductAvailabilityPort } from "../ports/product-availability.port";
 import { TextEmbeddingPort } from "../ports/text-embedding.port";
 import { VectorIndexPort } from "../ports/vector-index.port";
 import { SemanticCatalogRankingService } from "../services/semantic-catalog-ranking.service";
+import { TechnicalCatalogQueryParserService } from "../services/technical-catalog-query-parser.service";
 import {
   ProductAvailability,
   ProductAvailabilityLookupStatus,
   SemanticCatalogMatch,
 } from "../../domain/semantic-catalog.types";
+import { ParsedCatalogSearchQuery } from "../../domain/entities/catalog-search-query.entity";
 
 export interface SearchSemanticCatalogInput {
   query: string;
@@ -21,6 +23,7 @@ export interface SearchSemanticCatalogResult {
   availabilityStatus: ProductAvailabilityLookupStatus;
   availabilityByEan: Map<string, ProductAvailability>;
   availabilityError: string | null;
+  parsedQuery?: ParsedCatalogSearchQuery;
 }
 
 export class SearchSemanticCatalogUseCase {
@@ -37,6 +40,18 @@ export class SearchSemanticCatalogUseCase {
     const availability = await this.resolveAvailability(ranked, Boolean(input.includeAvailability));
 
     return { matches: ranked, ...availability };
+  }
+
+  public async executeHybrid(input: SearchSemanticCatalogInput): Promise<SearchSemanticCatalogResult> {
+    const parsedQuery = TechnicalCatalogQueryParserService.parse(input.query);
+    const vector = await this.embeddings.embedQuery(input.query);
+    const matches = await this.vectorIndex.query(vector, input.candidateTopK, input.filters);
+    const ranked = SemanticCatalogRankingService
+      .rankHybrid(matches, parsedQuery)
+      .slice(0, input.limit);
+    const availability = await this.resolveAvailability(ranked, Boolean(input.includeAvailability));
+
+    return { matches: ranked, parsedQuery, ...availability };
   }
 
   private async resolveAvailability(

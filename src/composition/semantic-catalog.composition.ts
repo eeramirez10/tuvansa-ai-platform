@@ -70,8 +70,11 @@ function unavailable(_req: Request, res: Response): void {
 
 function unavailablePublicRoutes(): Router {
   const router = Router();
+  router.post("/v1/catalog/search/hybrid", unavailable);
   router.post("/v1/catalog/search/semantic", unavailable);
+  router.post("/vector-catalog/search", unavailable);
   router.post("/vector-catalog/search/semantic", unavailable);
+  router.post("/ai/products/similar-v2", unavailable);
   router.post("/ai/products/similar-v2/semantic", unavailable);
   return router;
 }

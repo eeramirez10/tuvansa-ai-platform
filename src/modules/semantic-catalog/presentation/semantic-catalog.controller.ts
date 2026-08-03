@@ -21,6 +21,18 @@ export class SemanticCatalogController {
     res.status(200).json(SemanticCatalogPresenter.vectorSearch(this.indexName, request, result));
   };
 
+  public hybridVectorSearch = async (req: Request, res: Response): Promise<void> => {
+    const request = SemanticSearchRequestDto.fromVectorSearch(req.body).props;
+    const result = await this.searchCatalog.executeHybrid({
+      query: request.query,
+      candidateTopK: request.candidateTopK,
+      limit: request.limit,
+      filters: request.filters,
+      includeAvailability: true,
+    });
+    res.status(200).json(SemanticCatalogPresenter.hybridVectorSearch(this.indexName, request, result));
+  };
+
   public quoteSearch = async (req: Request, res: Response): Promise<void> => {
     const request = SemanticSearchRequestDto.fromQuoteSearch(req.body).props;
     const result = await this.searchCatalog.execute({
@@ -31,5 +43,17 @@ export class SemanticCatalogController {
       includeAvailability: true,
     });
     res.status(200).json(SemanticCatalogPresenter.quoteSearch(this.indexName, request, result));
+  };
+
+  public hybridQuoteSearch = async (req: Request, res: Response): Promise<void> => {
+    const request = SemanticSearchRequestDto.fromQuoteSearch(req.body).props;
+    const result = await this.searchCatalog.executeHybrid({
+      query: request.query,
+      candidateTopK: request.candidateTopK,
+      limit: request.limit,
+      filters: request.filters,
+      includeAvailability: true,
+    });
+    res.status(200).json(SemanticCatalogPresenter.hybridQuoteSearch(this.indexName, request, result));
   };
 }

@@ -20,6 +20,7 @@ The existing AI backends remain active while capabilities are migrated increment
 - Technical data suggestions for individual items and batches.
 - AI-assisted internal code generation for quote catalogs.
 - Pure semantic product search with Voyage embeddings, Pinecone and ERP availability.
+- Hybrid technical ranking for pipes, fittings, valves and flanges.
 - EAN deduplication with explicit `SEMANTIC_ONLY` ranking.
 - Local temporary product vector search, sync, update and delete lifecycle.
 - Async jobs for every migrated capability with synchronous compatibility adapters for the current frontend.
@@ -62,6 +63,7 @@ POST /api/v1/assistance/quote-catalogs/suggest-code
 GET  /api/v1/jobs/:id
 GET  /api/v1/jobs/:id/result
 POST /api/v1/catalog/search/semantic
+POST /api/v1/catalog/search/hybrid
 ```
 
 Temporary compatibility aliases:
@@ -78,6 +80,8 @@ POST /api/quote-catalogs/suggest-code
 GET  /api/extract/jobs/:id/status
 GET  /api/extract/jobs/:id/result
 POST /api/vector-catalog/search/semantic
+POST /api/vector-catalog/search
+POST /api/ai/products/similar-v2
 POST /api/ai/products/similar-v2/semantic
 POST /api/local-products-semantic/search
 POST /api/local-products-semantic/sync
