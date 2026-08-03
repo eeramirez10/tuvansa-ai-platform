@@ -7,12 +7,18 @@ import { AiJobType } from "../../../job-management/domain/ai-job.entity";
 import { UploadedDocument } from "../../domain/document-file";
 import { DocumentStoragePort } from "../ports/document-storage.port";
 
+export interface DocumentExtractionPromptVersions {
+  quoteDocument: string;
+  quotedExcel: string;
+  supplierQuote: string;
+}
+
 export class CreateDocumentExtractionJobUseCase {
   constructor(
     private readonly repository: AiJobRepository,
     private readonly queue: JobQueuePort,
     private readonly storage: DocumentStoragePort,
-    private readonly promptVersion: string,
+    private readonly promptVersions: DocumentExtractionPromptVersions,
     private readonly maxFileSizeBytes: number,
   ) {}
 
@@ -21,8 +27,9 @@ export class CreateDocumentExtractionJobUseCase {
     jobType: AiJobType = AiJobType.QUOTE_DOCUMENT_EXTRACTION,
   ) {
     this.validate(file, jobType);
+    const promptVersion = this.promptVersionFor(jobType);
     const inputHash = createHash("sha256").update(file.buffer).digest("hex");
-    const idempotencyKey = [jobType, this.promptVersion, inputHash].join(":");
+    const idempotencyKey = [jobType, promptVersion, inputHash].join(":");
     const stored = await this.storage.save(file);
 
     try {
@@ -31,7 +38,7 @@ export class CreateDocumentExtractionJobUseCase {
         idempotencyKey,
         inputHash,
         input: stored,
-        promptVersion: this.promptVersion,
+        promptVersion,
       });
 
       if (!creation.created) {
@@ -53,6 +60,12 @@ export class CreateDocumentExtractionJobUseCase {
       await this.storage.remove(stored.filePath).catch(() => undefined);
       throw error;
     }
+  }
+
+  private promptVersionFor(jobType: AiJobType): string {
+    if (jobType === AiJobType.QUOTED_EXCEL_EXTRACTION) return this.promptVersions.quotedExcel;
+    if (jobType === AiJobType.SUPPLIER_QUOTE_EXTRACTION) return this.promptVersions.supplierQuote;
+    return this.promptVersions.quoteDocument;
   }
 
   private validate(file: UploadedDocument, jobType: AiJobType): void {

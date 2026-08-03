@@ -46,7 +46,11 @@ export function composeApi(config: ApiConfig): ApiRuntime {
     repository,
     queue,
     storage,
-    config.promptVersion,
+    {
+      quoteDocument: config.promptVersion,
+      quotedExcel: config.quotedExcelPromptVersion,
+      supplierQuote: config.supplierQuotePromptVersion,
+    },
     config.maxUploadBytes,
   );
   const getJob = new GetAiJobUseCase(repository);

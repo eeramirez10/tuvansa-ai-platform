@@ -23,6 +23,12 @@ import {
   CreateAiJobResult,
 } from "../src/modules/job-management/application/ports/ai-job.repository";
 
+const PROMPT_VERSIONS = {
+  quoteDocument: "quote-items-v1",
+  quotedExcel: "quoted-excel-v1",
+  supplierQuote: "supplier-quote-v2",
+};
+
 class FakeQueue implements JobQueuePort {
   public messages: EnqueueJobInput[] = [];
   public async enqueue(input: EnqueueJobInput): Promise<void> { this.messages.push(input); }
@@ -45,12 +51,16 @@ class FakeStorage implements DocumentStoragePort {
 }
 
 class FakeRepository implements AiJobRepository {
-  private job?: AiJob;
+  public inputs: CreateAiJobInput[] = [];
+  private readonly jobsByKey = new Map<string, AiJob>();
+  private readonly jobsById = new Map<string, AiJob>();
 
   public async createOrFind(input: CreateAiJobInput): Promise<CreateAiJobResult> {
-    if (this.job) return { job: this.job, created: false };
-    this.job = new AiJob({
-      id: "document-job-1",
+    this.inputs.push(input);
+    const existing = this.jobsByKey.get(input.idempotencyKey);
+    if (existing) return { job: existing, created: false };
+    const job = new AiJob({
+      id: `document-job-${this.jobsByKey.size + 1}`,
       type: input.type,
       status: AiJobStatus.QUEUED,
       progress: 0,
@@ -67,11 +77,13 @@ class FakeRepository implements AiJobRepository {
       startedAt: null,
       completedAt: null,
     });
-    return { job: this.job, created: true };
+    this.jobsByKey.set(input.idempotencyKey, job);
+    this.jobsById.set(job.id, job);
+    return { job, created: true };
   }
 
-  public async findById(): Promise<AiJob | null> { return this.job ?? null; }
-  public async markProcessing(): Promise<AiJob | null> { return this.job ?? null; }
+  public async findById(id: string): Promise<AiJob | null> { return this.jobsById.get(id) ?? null; }
+  public async markProcessing(id: string): Promise<AiJob | null> { return this.findById(id); }
   public async updateProgress(): Promise<void> {}
   public async markQueuedForRetry(): Promise<void> {}
   public async markCompleted(): Promise<void> {}
@@ -122,7 +134,7 @@ test("creates one document job and removes only the duplicate upload", async () 
     repository,
     queue,
     storage,
-    "quote-items-v1",
+    PROMPT_VERSIONS,
     1024,
   );
   const file = {
@@ -146,7 +158,7 @@ test("rejects non-Excel files for quoted Excel jobs before storing them", async 
     new FakeRepository(),
     new FakeQueue(),
     storage,
-    "quote-items-v1",
+    PROMPT_VERSIONS,
     1024,
   );
 
@@ -159,6 +171,42 @@ test("rejects non-Excel files for quoted Excel jobs before storing them", async 
     (error: unknown) => error instanceof AppError && error.code === "QUOTED_EXCEL_FILE_REQUIRED",
   );
   assert.deepEqual(storage.removed, []);
+});
+
+test("reprocesses the same supplier file after its extractor version changes", async () => {
+  const repository = new FakeRepository();
+  const queue = new FakeQueue();
+  const storage = new FakeStorage();
+  const file = {
+    buffer: Buffer.from("same supplier quote"),
+    originalName: "supplier.pdf",
+    mimeType: "application/pdf",
+  };
+  const previous = new CreateDocumentExtractionJobUseCase(
+    repository,
+    queue,
+    storage,
+    { ...PROMPT_VERSIONS, supplierQuote: "supplier-quote-v1" },
+    1024,
+  );
+  const current = new CreateDocumentExtractionJobUseCase(
+    repository,
+    queue,
+    storage,
+    PROMPT_VERSIONS,
+    1024,
+  );
+
+  const first = await previous.execute(file, AiJobType.SUPPLIER_QUOTE_EXTRACTION);
+  const reprocessed = await current.execute(file, AiJobType.SUPPLIER_QUOTE_EXTRACTION);
+
+  assert.equal(first.created, true);
+  assert.equal(reprocessed.created, true);
+  assert.equal(queue.messages.length, 2);
+  assert.deepEqual(repository.inputs.map((input) => input.promptVersion), [
+    "supplier-quote-v1",
+    "supplier-quote-v2",
+  ]);
 });
 
 test("rejects scanned PDFs when OCR is disabled", async () => {
