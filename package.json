@@ -1,0 +1,48 @@
+{
+  "name": "tuvansa-ai-platform",
+  "version": "0.1.0",
+  "description": "Unified AI backend for document extraction and semantic catalog services.",
+  "private": true,
+  "main": "dist/apps/api.js",
+  "scripts": {
+    "dev:api": "tsx watch src/apps/api.ts",
+    "dev:worker": "tsx watch src/apps/worker.ts",
+    "start:api": "node dist/apps/api.js",
+    "start:worker": "node dist/apps/worker.js",
+    "typecheck": "prisma generate --schema=prisma/schema.prisma && tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "prisma:generate": "prisma generate --schema=prisma/schema.prisma",
+    "prisma:migrate": "NODE_ENV=development prisma migrate dev",
+    "build": "prisma generate --schema=prisma/schema.prisma && tsc -p tsconfig.json"
+  },
+  "engines": {
+    "node": "22.x",
+    "npm": "10.x"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.4.1",
+    "@prisma/client": "^7.4.1",
+    "bullmq": "^5.58.5",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "env-var": "^7.5.0",
+    "express": "^5.2.1",
+    "ioredis": "^5.6.1",
+    "multer": "^2.2.0",
+    "openai": "^6.25.0",
+    "pdfjs-dist": "^5.7.284",
+    "pg": "^8.19.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.2.0",
+    "@types/node": "^25.3.0",
+    "@types/pg": "^8.16.0",
+    "prisma": "^7.4.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "pnpm@11.18.0"
+}

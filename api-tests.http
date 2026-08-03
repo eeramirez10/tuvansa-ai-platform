@@ -1,0 +1,43 @@
+@baseUrl = http://localhost:4700
+@jobId = replace-me
+
+### Liveness
+GET {{baseUrl}}/health/live
+
+### Readiness
+GET {{baseUrl}}/health/ready
+
+### Create quote text extraction job
+POST {{baseUrl}}/api/v1/extractions/text
+Content-Type: application/json
+
+{
+  "text": "2 PZA VALVULA DE COMPUERTA 2 PULGADAS CLASE 150",
+  "source": "manual"
+}
+
+### Create quote document extraction job
+POST {{baseUrl}}/api/v1/extractions/documents
+Content-Type: multipart/form-data; boundary=QuoteBoundary
+
+--QuoteBoundary
+Content-Disposition: form-data; name="file"; filename="quote.xlsx"
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+< ./fixtures/quote.xlsx
+--QuoteBoundary--
+
+### Current-compatible create route
+POST {{baseUrl}}/api/extract/jobs/text
+Content-Type: application/json
+
+{
+  "text": "10 M TUBO ACERO AL CARBON 2 PULGADAS CEDULA 40",
+  "source": "email"
+}
+
+### Job status
+GET {{baseUrl}}/api/v1/jobs/{{jobId}}
+
+### Job result
+GET {{baseUrl}}/api/v1/jobs/{{jobId}}/result

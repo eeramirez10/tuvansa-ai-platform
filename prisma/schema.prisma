@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AiJobStatus {
+  queued
+  processing
+  completed
+  failed
+  cancelled
+  needs_review
+}
+
+enum AiJobType {
+  quote_text_extraction
+  quote_document_extraction
+  quoted_excel_extraction
+  supplier_quote_extraction
+  semantic_search
+  vector_catalog_sync
+  technical_data_suggestion
+}
+
+model AiJob {
+  id             String       @id @default(uuid())
+  type           AiJobType
+  status         AiJobStatus  @default(queued)
+  progress       Int          @default(0)
+  idempotencyKey String       @unique @map("idempotency_key")
+  inputHash      String       @map("input_hash")
+  inputJson      Json         @map("input_json")
+  resultJson     Json?        @map("result_json")
+  errorCode      String?      @map("error_code")
+  errorMessage   String?      @map("error_message")
+  promptVersion  String?      @map("prompt_version")
+  attempts       Int          @default(0)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  startedAt      DateTime?    @map("started_at")
+  completedAt    DateTime?    @map("completed_at")
+  runs           AiJobRun[]
+
+  @@index([status, createdAt])
+  @@index([type, createdAt])
+  @@map("ai_jobs")
+}
+
+model AiJobRun {
+  id            String   @id @default(uuid())
+  jobId         String   @map("job_id")
+  attempt       Int
+  provider      String
+  model         String
+  promptVersion String?  @map("prompt_version")
+  inputTokens   Int?     @map("input_tokens")
+  outputTokens  Int?     @map("output_tokens")
+  latencyMs     Int?     @map("latency_ms")
+  succeeded     Boolean
+  errorCode     String?  @map("error_code")
+  errorMessage  String?  @map("error_message")
+  createdAt     DateTime @default(now()) @map("created_at")
+  job           AiJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, attempt])
+  @@map("ai_job_runs")
+}
