@@ -1,3 +1,8 @@
+export interface PdfPositionedLineToken {
+  text: string;
+  x: number;
+}
+
 export class PdfDigitalReconciliationService {
   private readonly unitTokens: Set<string>;
   private readonly noisePatterns: RegExp[];
@@ -70,8 +75,16 @@ export class PdfDigitalReconciliationService {
     ];
   }
 
-  public reconcilePage(pageText: string): string {
+  public reconcilePage(
+    pageText: string,
+    positionedLines: PdfPositionedLineToken[][] = [],
+  ): string {
     const lines = this.toLines(pageText);
+    const tableRows = this.extractStructuredTableRows(positionedLines);
+    if (tableRows.length > 0) {
+      return `${lines.join("\n")}\n\nEXTRACTION_HINTS\nSTRUCTURED_TABLE_ROWS\n${tableRows.join("\n")}`.trim();
+    }
+
     const quantityLines = this.extractAllQuantityLines(lines);
     const descriptionLines = this.extractDescriptionCandidates(lines);
     const structuredLines = this.buildStructuredBlock(quantityLines, descriptionLines);
@@ -81,6 +94,153 @@ export class PdfDigitalReconciliationService {
     }
 
     return `${lines.join("\n")}\n\nEXTRACTION_HINTS\n${structuredLines.join("\n")}`.trim();
+  }
+
+  private extractStructuredTableRows(lines: PdfPositionedLineToken[][]): string[] {
+    const headerIndex = lines.findIndex((line) => this.isTechnicalTableHeader(line));
+    if (headerIndex < 0) return [];
+
+    const header = lines[headerIndex]!;
+    const columns = this.resolveColumns(header);
+    if (!columns.description || !columns.unit || !columns.quantity) return [];
+
+    const technicalColumns = Object.entries(columns)
+      .filter(([key]) => !["ident", "description", "unit", "quantity"].includes(key))
+      .map(([key, column]) => ({ key, ...column! }))
+      .sort((a, b) => a.x - b.x);
+    const firstTechnicalX = technicalColumns[0]?.x ?? columns.unit.x;
+    const rows: string[] = [];
+
+    for (const line of lines.slice(headerIndex + 1)) {
+      const unit = this.valueInColumn(line, columns.unit.x, columns.quantity.x);
+      const quantity = this.valueInColumn(line, columns.quantity.x, Number.POSITIVE_INFINITY);
+      if (!unit || !this.isNumeric(quantity)) continue;
+
+      const leadingText = line
+        .filter((token) => token.x < firstTechnicalX - 2)
+        .sort((a, b) => a.x - b.x)
+        .map((token) => token.text)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const { sourceId, description } = this.splitSourceId(leadingText, Boolean(columns.ident));
+      if (!description) continue;
+
+      const parts = [
+        sourceId ? `SOURCE_ID=${sourceId}` : null,
+        `DESCRIPTION=${description}`,
+      ];
+      const technicalValues: Record<string, string> = {};
+      for (let index = 0; index < technicalColumns.length; index += 1) {
+        const column = technicalColumns[index]!;
+        const nextX = technicalColumns[index + 1]?.x ?? columns.unit.x;
+        const value = this.normalizeTechnicalValue(this.valueInColumn(line, column.x, nextX));
+        if (value) technicalValues[column.key] = value;
+      }
+      const descriptionSuffix = this.buildNaturalDescriptionSuffix(technicalValues);
+      if (descriptionSuffix) parts.push(`DESCRIPTION_SUFFIX=${descriptionSuffix}`);
+      parts.push(`UNIT=${unit}`, `QUANTITY=${quantity}`);
+      rows.push(`ROW_${rows.length + 1}: ${parts.filter(Boolean).join(" | ")}`);
+    }
+
+    return rows.slice(0, 200);
+  }
+
+  private isTechnicalTableHeader(line: PdfPositionedLineToken[]): boolean {
+    const normalized = line.map((token) => this.normalizeHeader(token.text));
+    return normalized.some((value) => value.includes("DESCRIPCION")) &&
+      normalized.some((value) => value.includes("UNIDAD")) &&
+      normalized.some((value) => value.includes("CANTIDAD")) &&
+      normalized.some((value) => /DIAM|SCH|CEDULA|ESPESOR|NORMA|PRESION|CLASE|BORE/.test(value));
+  }
+
+  private resolveColumns(line: PdfPositionedLineToken[]): Record<string, { x: number; header: string } | undefined> {
+    const columns: Record<string, { x: number; header: string } | undefined> = {};
+    for (const token of [...line].sort((a, b) => a.x - b.x)) {
+      const header = this.normalizeHeader(token.text);
+      const key = this.columnKey(header);
+      if (key && !columns[key]) columns[key] = { x: token.x, header };
+    }
+    return columns;
+  }
+
+  private columnKey(header: string): string | null {
+    if (/^(IDENT|ID|CODIGO|COD)$/.test(header)) return "ident";
+    if (header.includes("DESCRIPCION")) return "description";
+    if (header.includes("UNIDAD") || header === "UM" || header === "U M") return "unit";
+    if (header.includes("CANTIDAD") || header === "CANT") return "quantity";
+    if (/DIAM(?:ETRO)?\s*1/.test(header)) return "diameter1";
+    if (/DIAM(?:ETRO)?\s*2/.test(header)) return "diameter2";
+    if (/^(SCH|SCH1|CED|CEDULA)/.test(header)) return "schedule";
+    if (header.includes("NORMA") || header.includes("STANDARD")) return "standard";
+    if (header.includes("ESPESOR") || header.includes("THICKNESS")) return "thickness";
+    if (header.includes("PRESION") || header.includes("PRESSURE")) return "pressure";
+    if (header.includes("CLASE") || header.includes("CLASS")) return "class";
+    if (header.includes("BORE")) return "bore";
+    if (header.includes("MATERIAL")) return "material";
+    if (header.includes("MARCA") || header.includes("BRAND")) return "brand";
+    return null;
+  }
+
+  private valueInColumn(line: PdfPositionedLineToken[], startX: number, endX: number): string {
+    return line
+      .filter((token) => token.x >= startX - 2 && token.x < endX - 2)
+      .sort((a, b) => a.x - b.x)
+      .map((token) => token.text)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  private splitSourceId(value: string, hasIdentColumn: boolean): { sourceId: string | null; description: string } {
+    if (!hasIdentColumn) return { sourceId: null, description: value };
+    const match = value.match(/^(\S+)\s+(.+)$/);
+    return match
+      ? { sourceId: match[1]!, description: match[2]!.trim() }
+      : { sourceId: null, description: value };
+  }
+
+  private normalizeTechnicalValue(value: string): string | null {
+    const normalized = value.trim();
+    if (!normalized || /^[-–—]+$/.test(normalized) || /^0(?:\.0+)?$/.test(normalized)) return null;
+    return normalized.startsWith(".") ? `0${normalized}` : normalized;
+  }
+
+  private buildNaturalDescriptionSuffix(values: Record<string, string>): string {
+    const parts: string[] = [];
+    const diameters = [values.diameter1, values.diameter2]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => `${value.replace(/\s*(?:PULG(?:ADAS?)?|IN(?:CH(?:ES)?)?|["”])$/i, "")}"`);
+    if (diameters.length > 0) parts.push(diameters.join(" X "));
+
+    if (values.schedule) {
+      const schedule = values.schedule
+        .replace(/^(?:S-|SCH(?:EDULE)?\.?\s*|CED(?:ULA)?\.?\s*)/i, "")
+        .trim();
+      if (schedule) parts.push(`CED. ${schedule}`);
+    }
+
+    ["standard", "material", "thickness", "pressure"].forEach((key) => {
+      if (values[key]) parts.push(values[key]);
+    });
+    if (values.class) parts.push(`CLASE ${values.class}`);
+    if (values.bore) parts.push(`BORE ${values.bore}`);
+    if (values.brand) parts.push(values.brand);
+    return parts.join(" ").replace(/\s+/g, " ").trim();
+  }
+
+  private normalizeHeader(value: string): string {
+    return value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[()./_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toUpperCase();
+  }
+
+  private isNumeric(value: string): boolean {
+    return /^\d+(?:[.,]\d+)?$/.test(value.replace(/,/g, ""));
   }
 
   private toLines(text: string): string[] {

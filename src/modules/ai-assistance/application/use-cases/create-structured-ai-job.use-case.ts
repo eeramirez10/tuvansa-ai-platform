@@ -9,6 +9,7 @@ const SUPPORTED_TYPES = new Set<AiJobType>([
   AiJobType.TECHNICAL_DATA_SUGGESTION,
   AiJobType.MISSING_PRODUCT_NORMALIZATION,
   AiJobType.QUOTE_CATALOG_CODE_SUGGESTION,
+  AiJobType.PARTY_DATA_EXTRACTION,
 ]);
 
 export class CreateStructuredAiJobUseCase {

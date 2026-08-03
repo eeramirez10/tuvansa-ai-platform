@@ -33,6 +33,7 @@ export class ProcessTextExtractionJobUseCase {
         source: input.source,
         items_count: extraction.items.length,
         items: extraction.items.map((item) => item.toPrimitives()),
+        detected_customer: extraction.customer,
       };
 
       await this.repository.recordRun({

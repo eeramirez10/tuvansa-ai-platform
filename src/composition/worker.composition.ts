@@ -23,6 +23,7 @@ import { ProcessStructuredAiJobUseCase } from "../modules/ai-assistance/applicat
 import { OpenAiCatalogCodeProcessor } from "../modules/ai-assistance/infrastructure/openai-catalog-code.processor";
 import { OpenAiMissingProductsProcessor } from "../modules/ai-assistance/infrastructure/openai-missing-products.processor";
 import { OpenAiTechnicalDataProcessor } from "../modules/ai-assistance/infrastructure/openai-technical-data.processor";
+import { OpenAiPartyDataProcessor } from "../modules/ai-assistance/infrastructure/openai-party-data.processor";
 import { BuildProscaiCatalogVariantsUseCase } from "../modules/semantic-catalog/application/use-cases/build-proscai-catalog-variants.use-case";
 import { ProcessVectorCatalogSyncJobUseCase } from "../modules/semantic-catalog/application/use-cases/process-vector-catalog-sync-job.use-case";
 import { SyncProscaiCatalogVariantsUseCase } from "../modules/semantic-catalog/application/use-cases/sync-proscai-catalog-variants.use-case";
@@ -67,6 +68,12 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
     new OpenAiCatalogCodeProcessor(config.openAiApiKey, config.openAiModel),
     "QUOTE_CATALOG_CODE_SUGGESTION_FAILED",
   );
+  const partyDataProcessor = new ProcessStructuredAiJobUseCase(
+    repository,
+    AiJobType.PARTY_DATA_EXTRACTION,
+    new OpenAiPartyDataProcessor(config.openAiApiKey, config.openAiModel),
+    "PARTY_DATA_EXTRACTION_FAILED",
+  );
   const storage = new LocalDocumentStorageAdapter(config.documentStorageDirectory);
   const documentExtractor = new DocumentTextExtractorAdapter(
     new DocumentTypeDetector(),
@@ -110,6 +117,10 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
             }
             if (job.data.type === AiJobType.QUOTE_CATALOG_CODE_SUGGESTION) {
               await catalogCodeProcessor.execute(job.data.jobId);
+              return;
+            }
+            if (job.data.type === AiJobType.PARTY_DATA_EXTRACTION) {
+              await partyDataProcessor.execute(job.data.jobId);
               return;
             }
             if (job.data.type === AiJobType.VECTOR_CATALOG_SYNC) {
@@ -186,6 +197,7 @@ function errorCodeFor(type: AiJobType): string {
   if (type === AiJobType.TECHNICAL_DATA_SUGGESTION) return "TECHNICAL_DATA_SUGGESTION_FAILED";
   if (type === AiJobType.MISSING_PRODUCT_NORMALIZATION) return "MISSING_PRODUCT_NORMALIZATION_FAILED";
   if (type === AiJobType.QUOTE_CATALOG_CODE_SUGGESTION) return "QUOTE_CATALOG_CODE_SUGGESTION_FAILED";
+  if (type === AiJobType.PARTY_DATA_EXTRACTION) return "PARTY_DATA_EXTRACTION_FAILED";
   if (type === AiJobType.QUOTED_EXCEL_EXTRACTION) return "QUOTED_EXCEL_EXTRACTION_FAILED";
   if (type === AiJobType.SUPPLIER_QUOTE_EXTRACTION) return "SUPPLIER_QUOTE_EXTRACTION_FAILED";
   if (type === AiJobType.QUOTE_TEXT_EXTRACTION) return "QUOTE_TEXT_EXTRACTION_FAILED";

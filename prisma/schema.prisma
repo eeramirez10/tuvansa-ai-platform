@@ -27,6 +27,7 @@ enum AiJobType {
   technical_data_suggestion
   missing_product_normalization
   quote_catalog_code_suggestion
+  party_data_extraction
 }
 
 model AiJob {

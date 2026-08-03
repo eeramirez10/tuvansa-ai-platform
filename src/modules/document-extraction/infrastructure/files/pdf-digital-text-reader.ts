@@ -1,5 +1,8 @@
 import path from "node:path";
-import { PdfDigitalReconciliationService } from "./pdf-digital-reconciliation.service";
+import {
+  PdfDigitalReconciliationService,
+  PdfPositionedLineToken,
+} from "./pdf-digital-reconciliation.service";
 
 export interface PdfDigitalTextReadResult {
   textContent: string;
@@ -43,10 +46,14 @@ export class PdfDigitalTextReader {
       for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
         const page = await pdf.getPage(pageNumber);
         const textContent = await page.getTextContent();
-        const pageText = this.buildPageText(textContent.items as PdfTextItemLike[]);
+        const positionedLines = this.buildPositionedLines(textContent.items as PdfTextItemLike[]);
+        const pageText = this.buildPageText(positionedLines);
         if (pageText) pageTexts.push(pageText);
 
-        const hint = this.extractHints(this.reconciler.reconcilePage(pageText), pageNumber);
+        const hint = this.extractHints(
+          this.reconciler.reconcilePage(pageText, positionedLines),
+          pageNumber,
+        );
         if (hint) pageHints.push(hint);
       }
 
@@ -59,7 +66,7 @@ export class PdfDigitalTextReader {
     }
   }
 
-  private buildPageText(items: PdfTextItemLike[]): string {
+  private buildPositionedLines(items: PdfTextItemLike[]): PositionedToken[][] {
     const tokens = items
       .map((item) => this.toToken(item))
       .filter((token): token is PositionedToken => token !== null)
@@ -67,23 +74,31 @@ export class PdfDigitalTextReader {
         const sameLine = Math.abs(a.y - b.y) <= this.lineTolerance;
         return sameLine ? a.x - b.x : b.y - a.y;
       });
-    if (tokens.length === 0) return "";
+    if (tokens.length === 0) return [];
 
-    const lines: string[] = [];
+    const lines: PositionedToken[][] = [];
     let currentLineTokens: PositionedToken[] = [];
     let currentLineY = tokens[0]!.y;
 
     for (const token of tokens) {
       if (Math.abs(token.y - currentLineY) > this.lineTolerance) {
-        lines.push(this.joinLineTokens(currentLineTokens));
+        lines.push(currentLineTokens);
         currentLineTokens = [token];
         currentLineY = token.y;
       } else {
         currentLineTokens.push(token);
       }
     }
-    if (currentLineTokens.length > 0) lines.push(this.joinLineTokens(currentLineTokens));
-    return lines.map((line) => line.trim()).filter(Boolean).join("\n");
+    if (currentLineTokens.length > 0) lines.push(currentLineTokens);
+    return lines;
+  }
+
+  private buildPageText(lines: PdfPositionedLineToken[][]): string {
+    return lines
+      .map((line) => this.joinLineTokens(line))
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join("\n");
   }
 
   private toToken(item: PdfTextItemLike): PositionedToken | null {
@@ -94,7 +109,7 @@ export class PdfDigitalTextReader {
     return Number.isFinite(x) && Number.isFinite(y) ? { text, x, y } : null;
   }
 
-  private joinLineTokens(tokens: PositionedToken[]): string {
+  private joinLineTokens(tokens: PdfPositionedLineToken[]): string {
     const ordered = [...tokens].sort((a, b) => a.x - b.x);
     const parts: string[] = [];
     for (const token of ordered) {

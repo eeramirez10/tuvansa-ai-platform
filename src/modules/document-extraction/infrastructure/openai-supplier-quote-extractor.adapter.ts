@@ -211,6 +211,7 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
         extension: channel === "PHONE" ? this.text(raw.extension) : null,
         isWhatsApp: channel === "PHONE" && raw.isWhatsApp === true,
         contactName: this.text(raw.contactName),
+        contactPosition: this.text(raw.contactPosition),
         label: this.text(raw.label),
         confidence: this.confidence(raw.confidence ?? 0.5),
         evidence: this.text(raw.evidence),
@@ -321,7 +322,7 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
                   items: {
                     type: "object",
                     additionalProperties: false,
-                    required: ["channel", "value", "phoneKind", "extension", "isWhatsApp", "contactName", "label", "confidence", "evidence"],
+                    required: ["channel", "value", "phoneKind", "extension", "isWhatsApp", "contactName", "contactPosition", "label", "confidence", "evidence"],
                     properties: {
                       channel: { type: "string", enum: ["EMAIL", "PHONE"] },
                       value: { type: "string" },
@@ -329,6 +330,7 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
                       extension: { type: ["string", "null"] },
                       isWhatsApp: { type: "boolean" },
                       contactName: { type: ["string", "null"] },
+                      contactPosition: { type: ["string", "null"] },
                       label: { type: ["string", "null"] },
                       confidence: { type: "number" },
                       evidence: { type: ["string", "null"] },
@@ -447,7 +449,7 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
       "En supplier.contacts devuelve por separado cada correo y cada telefono visible; nunca juntes varios valores en una cadena.",
       "Para telefonos usa phoneKind LANDLINE, MOBILE o UNKNOWN. Marca isWhatsApp=true solo si el documento dice WhatsApp/WA o lo identifica explicitamente; un celular por si solo no prueba que tenga WhatsApp.",
       "Separa cualquier extension telefonica en contacts.extension y deja contacts.value solo con el numero principal.",
-      "Deduplica contactos repetidos y conserva nombre de contacto o etiqueta cuando el documento los asocie.",
+      "Deduplica contactos repetidos y conserva contacts.contactName, contacts.contactPosition y contacts.label cuando el documento los asocie.",
       "Extrae todas las partidas reales de material y conserva la descripcion comercial del proveedor.",
       "Nunca devuelvas items vacio si existe al menos una fila con cantidad, descripcion y precio.",
       "Una fila de material sigue siendo partida aunque sea la unica del documento.",

@@ -8,6 +8,7 @@ import {
   TechnicalDataRequestDto,
 } from "../domain/technical-data-request.dto";
 import { AiJobType } from "../../job-management/domain/ai-job.entity";
+import { PartyDataRequestDto } from "../domain/party-data-request.dto";
 
 export class AiAssistanceController {
   constructor(
@@ -53,6 +54,16 @@ export class AiAssistanceController {
   public suggestCatalogCode = async (req: Request, res: Response): Promise<void> => {
     const input = CatalogCodeRequestDto.create(req.body).toJobInput();
     await this.respondWithResult(res, AiJobType.QUOTE_CATALOG_CODE_SUGGESTION, input);
+  };
+
+  public createPartyDataJob = async (req: Request, res: Response): Promise<void> => {
+    const input = PartyDataRequestDto.create(req.body).toJobInput();
+    this.respondCreated(res, await this.createJob.execute(AiJobType.PARTY_DATA_EXTRACTION, input));
+  };
+
+  public extractPartyData = async (req: Request, res: Response): Promise<void> => {
+    const input = PartyDataRequestDto.create(req.body).toJobInput();
+    await this.respondWithResult(res, AiJobType.PARTY_DATA_EXTRACTION, input);
   };
 
   private async respondWithResult(res: Response, type: AiJobType, input: unknown): Promise<void> {

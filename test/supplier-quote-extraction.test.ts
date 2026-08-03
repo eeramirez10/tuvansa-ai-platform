@@ -107,10 +107,10 @@ test("normalizes and deduplicates multiple supplier contacts", async () => {
       email: "ventas@example.com",
       phone: "81 1234 5678",
       contacts: [
-        { channel: "EMAIL", value: "ventas@example.com", phoneKind: null, extension: null, isWhatsApp: false, contactName: "Ventas", label: "Ventas", confidence: 0.95, evidence: "ventas@example.com" },
-        { channel: "EMAIL", value: "VENTAS@example.com", phoneKind: null, extension: null, isWhatsApp: false, contactName: null, label: null, confidence: 0.9, evidence: null },
-        { channel: "PHONE", value: "81 1234 5678", phoneKind: "LANDLINE", extension: "204", isWhatsApp: false, contactName: "Ventas", label: "Tel", confidence: 0.9, evidence: "Tel. 81 1234 5678 ext. 204" },
-        { channel: "PHONE", value: "81 9999 0000", phoneKind: "MOBILE", extension: null, isWhatsApp: true, contactName: "Ventas", label: "WhatsApp", confidence: 0.98, evidence: "WhatsApp 81 9999 0000" },
+        { channel: "EMAIL", value: "ventas@example.com", phoneKind: null, extension: null, isWhatsApp: false, contactName: "Ana Pérez", contactPosition: "Ejecutiva de ventas", label: "Ventas", confidence: 0.95, evidence: "ventas@example.com" },
+        { channel: "EMAIL", value: "VENTAS@example.com", phoneKind: null, extension: null, isWhatsApp: false, contactName: null, contactPosition: null, label: null, confidence: 0.9, evidence: null },
+        { channel: "PHONE", value: "81 1234 5678", phoneKind: "LANDLINE", extension: "204", isWhatsApp: false, contactName: "Ana Pérez", contactPosition: "Ejecutiva de ventas", label: "Tel", confidence: 0.9, evidence: "Tel. 81 1234 5678 ext. 204" },
+        { channel: "PHONE", value: "81 9999 0000", phoneKind: "MOBILE", extension: null, isWhatsApp: true, contactName: "Ana Pérez", contactPosition: "Ejecutiva de ventas", label: "WhatsApp", confidence: 0.98, evidence: "WhatsApp 81 9999 0000" },
       ],
       confidence: 0.95,
       evidence: "PROVEEDOR INDUSTRIAL",
@@ -130,4 +130,5 @@ test("normalizes and deduplicates multiple supplier contacts", async () => {
   assert.equal(extraction.result.supplier.phone, "81 1234 5678");
   assert.equal(extraction.result.supplier.contacts[2]?.isWhatsApp, true);
   assert.equal(extraction.result.supplier.contacts[1]?.extension, "204");
+  assert.equal(extraction.result.supplier.contacts[0]?.contactPosition, "Ejecutiva de ventas");
 });
