@@ -8,7 +8,7 @@ export class ExtractionJobsRoutes {
     private readonly maxFileSizeBytes: number,
   ) {}
 
-  public build(): Router {
+  public buildV1(): Router {
     const router = Router();
     const upload = multer({
       storage: multer.memoryStorage(),
@@ -21,6 +21,16 @@ export class ExtractionJobsRoutes {
     router.post("/v1/extractions/supplier-quotes", upload.single("file"), this.controller.createFromSupplierQuote);
     router.get("/v1/jobs/:id", this.controller.status);
     router.get("/v1/jobs/:id/result", this.controller.result);
+
+    return router;
+  }
+
+  public buildCompatibility(): Router {
+    const router = Router();
+    const upload = multer({
+      storage: multer.memoryStorage(),
+      limits: { fileSize: this.maxFileSizeBytes, files: 1 },
+    });
 
     // Compatibility aliases used by the current frontend.
     router.post("/extract/jobs/text", this.controller.createFromText);

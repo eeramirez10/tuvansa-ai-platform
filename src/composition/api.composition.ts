@@ -117,8 +117,10 @@ export function composeApi(config: ApiConfig): ApiRuntime {
     semanticCatalog.localProductRoutes,
   );
   app.use("/api", semanticCatalog.publicRoutes);
-  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), routes.build());
-  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), assistanceRoutes.build());
+  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), routes.buildV1());
+  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), routes.buildCompatibility());
+  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), assistanceRoutes.buildV1());
+  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), assistanceRoutes.buildCompatibility());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), catalogMaintenanceRoutes.build());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), catalogEvaluationRoutes.build());
   app.use(errorHandler);
