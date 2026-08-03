@@ -1,45 +1,56 @@
-# Semantic service cutover
+# AI platform cutover
 
-The unified API can replace the pure semantic routes without changing response contracts.
-Keep the previous services running during the validation window.
+The browser must not receive `INTERNAL_API_KEY`. AI traffic follows this path:
 
-## Core backend
+```text
+cotizador-v2 -> cotizador-core-backend (JWT) -> tuvansa-ai-platform (internal key)
+```
 
-Point local temporary product vector operations to:
+## Local configuration
+
+In `cotizador-v2`:
 
 ```dotenv
+VITE_AI_API_URL=http://localhost:4600
+```
+
+In `cotizador-core-backend`:
+
+```dotenv
+AI_PLATFORM_BASE_URL=http://localhost:4700
+AI_PLATFORM_INTERNAL_API_KEY=use-the-same-internal-key
+AI_PLATFORM_TIMEOUT_MS=75000
 GPT_LOCAL_PRODUCTS_URL=http://localhost:4700/api/local-products-semantic
-GPT_LOCAL_PRODUCTS_API_KEY=
+GPT_LOCAL_PRODUCTS_API_KEY=use-the-same-local-products-key
 ```
 
-Use the same value in `LOCAL_PRODUCTS_INTERNAL_API_KEY` when an internal key is enabled.
-
-## Current AI backend proxy
-
-Point the semantic catalog proxy to:
+In `tuvansa-ai-platform`:
 
 ```dotenv
-CATALOG_V2_SEMANTIC_SEARCH_URL=http://localhost:4700/api/vector-catalog/search/semantic
+INTERNAL_API_KEY=use-the-same-internal-key
+LOCAL_PRODUCTS_INTERNAL_API_KEY=use-the-same-local-products-key
 ```
 
-This keeps `/api/ai/products/similar-v2/semantic` on the current AI backend while the
-frontend remains unchanged.
+All extraction, assistance and catalog search routes require an internal key. Health endpoints remain public.
 
-## Direct frontend cutover
+## Validation completed locally
 
-After proxy validation, the frontend can use the unified API base URL and keep this path:
+- Authenticated semantic-only search through core.
+- Authenticated text extraction through core, Redis and worker.
+- Authenticated XLSX upload through core, temporary storage and worker.
+- Hybrid search parity with the previous GPT backend.
+- Vector synchronization dry-run with no Pinecone mutations.
+- Persisted catalog evaluation job with 100% accuracy on the executed case.
 
-```dotenv
-VITE_AI_SIMILAR_PRODUCTS_SEMANTIC_PATH=/api/ai/products/similar-v2/semantic
-```
+## Production order
 
-## Validation order
+1. Deploy the unified API, worker, PostgreSQL migrations and Redis.
+2. Configure the internal key in the unified backend and core.
+3. Deploy the core proxy and verify its health and one authenticated AI request.
+4. Set `VITE_AI_API_URL` to the production core URL and deploy the frontend.
+5. Observe errors, queue depth and OpenAI usage during the validation window.
+6. Stop the legacy AI services only after no consumer traffic reaches them.
 
-1. Compare the first ten EANs returned by the old and unified semantic routes.
-2. Confirm every result has `rankingStrategy=SEMANTIC_ONLY` and no duplicate EAN.
-3. Confirm ERP branch code, stock, currency, average cost and last cost.
-4. Create, edit and deactivate one local product and verify Pinecone synchronization.
-5. Keep the old routes available until frontend and core logs show no compatibility errors.
+## Rollback
 
-Hybrid search and bulk catalog indexing still belong to `tuvansa-backend-gpt` until their
-separate migration is complete.
+The frontend production URL can remain pointed at the legacy AI backend until the production validation succeeds. If the cutover fails, restore that URL; no quote or customer data needs to be rolled back because the AI database stores jobs and audit only.

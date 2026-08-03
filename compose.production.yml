@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tuvansa_ai
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${AI_POSTGRES_PASSWORD:?AI_POSTGRES_PASSWORD is required}
+    volumes:
+      - ai_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tuvansa_ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory-policy noeviction
+    volumes:
+      - ai_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: .
+      target: build
+    env_file: ${AI_ENV_FILE:-.env.production}
+    environment:
+      DATABASE_URL: ${AI_DATABASE_URL:?AI_DATABASE_URL is required}
+    command: pnpm prisma:deploy
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    env_file: ${AI_ENV_FILE:-.env.production}
+    environment:
+      API_PORT: 4700
+      DATABASE_URL: ${AI_DATABASE_URL:?AI_DATABASE_URL is required}
+      REDIS_URL: redis://redis:6379
+      DOCUMENT_STORAGE_DIRECTORY: /app/storage/uploads
+    ports:
+      - "127.0.0.1:4700:4700"
+    volumes:
+      - ./storage:/app/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    env_file: ${AI_ENV_FILE:-.env.production}
+    environment:
+      DATABASE_URL: ${AI_DATABASE_URL:?AI_DATABASE_URL is required}
+      REDIS_URL: redis://redis:6379
+      DOCUMENT_STORAGE_DIRECTORY: /app/storage/uploads
+    command: node dist/apps/worker.js
+    volumes:
+      - ./storage:/app/storage
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+volumes:
+  ai_postgres_data:
+  ai_redis_data:

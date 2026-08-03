@@ -5,7 +5,7 @@ import { get } from "env-var";
 export interface BaseConfig {
   databaseUrl: string;
   redisUrl: string;
-  internalApiKey?: string;
+  internalApiKey: string;
   documentStorageDirectory: string;
 }
 
@@ -29,7 +29,7 @@ export interface ApiConfig extends BaseConfig {
   erpProductsBaseUrl?: string;
   erpProductsTimeoutMs: number;
   erpProductsApiKey?: string;
-  localProductsInternalApiKey?: string;
+  localProductsInternalApiKey: string;
 }
 
 export interface WorkerConfig extends BaseConfig {
@@ -59,14 +59,15 @@ function loadBaseConfig(): BaseConfig {
   return {
     databaseUrl: get("DATABASE_URL").required().asString(),
     redisUrl: get("REDIS_URL").default("redis://localhost:6379").asString(),
-    internalApiKey: get("INTERNAL_API_KEY").asString() || undefined,
+    internalApiKey: get("INTERNAL_API_KEY").required().asString(),
     documentStorageDirectory: path.resolve(process.cwd(), storageDirectory),
   };
 }
 
 export function loadApiConfig(): ApiConfig {
+  const baseConfig = loadBaseConfig();
   return {
-    ...loadBaseConfig(),
+    ...baseConfig,
     port: get("API_PORT").default("4700").asPortNumber(),
     jobAttempts: get("JOB_ATTEMPTS").default("3").asIntPositive(),
     jobBackoffMs: get("JOB_BACKOFF_MS").default("2000").asIntPositive(),
@@ -94,7 +95,9 @@ export function loadApiConfig(): ApiConfig {
       .asString() || undefined,
     erpProductsTimeoutMs: get("ERP_PRODUCTS_TIMEOUT_MS").default("5000").asIntPositive(),
     erpProductsApiKey: get("ERP_PRODUCTS_API_KEY").asString() || undefined,
-    localProductsInternalApiKey: get("LOCAL_PRODUCTS_INTERNAL_API_KEY").asString() || undefined,
+    localProductsInternalApiKey: get("LOCAL_PRODUCTS_INTERNAL_API_KEY")
+      .default(baseConfig.internalApiKey)
+      .asString(),
   };
 }
 

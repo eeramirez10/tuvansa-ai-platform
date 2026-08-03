@@ -116,7 +116,7 @@ export function composeApi(config: ApiConfig): ApiRuntime {
     internalApiKeyMiddleware(config.localProductsInternalApiKey),
     semanticCatalog.localProductRoutes,
   );
-  app.use("/api", semanticCatalog.publicRoutes);
+  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), semanticCatalog.publicRoutes);
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), routes.buildV1());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), routes.buildCompatibility());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), assistanceRoutes.buildV1());

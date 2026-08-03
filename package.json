@@ -13,6 +13,7 @@
     "test": "node --import tsx --test test/*.test.ts",
     "prisma:generate": "prisma generate --schema=prisma/schema.prisma",
     "prisma:migrate": "NODE_ENV=development prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
     "build": "prisma generate --schema=prisma/schema.prisma && tsc -p tsconfig.json"
   },
   "engines": {

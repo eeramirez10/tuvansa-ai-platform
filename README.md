@@ -5,7 +5,7 @@ Unified backend for Tuvansa AI capabilities. It uses a modular monolith with Cle
 - `api`: validates requests, persists jobs and publishes queue messages.
 - `worker`: consumes jobs and performs AI processing.
 
-The existing AI backends remain active while capabilities are migrated incrementally.
+The operational capabilities from the two previous AI backends are consolidated here. Keep legacy deployments available only during the production validation window.
 
 ## Implemented capabilities
 
@@ -23,6 +23,8 @@ The existing AI backends remain active while capabilities are migrated increment
 - Hybrid technical ranking for pipes, fittings, valves and flanges.
 - EAN deduplication with explicit `SEMANTIC_ONLY` ranking.
 - Local temporary product vector search, sync, update and delete lifecycle.
+- Proscai vector projection and asynchronous incremental synchronization.
+- Persisted catalog-search evaluation jobs and metrics.
 - Async jobs for every migrated capability with synchronous compatibility adapters for the current frontend.
 - Compatibility response fields used by the current frontend (`file_name`, `file_type`, `items_count`).
 - Explicit rejection for scanned PDFs that require external OCR.
@@ -30,6 +32,8 @@ The existing AI backends remain active while capabilities are migrated increment
 - API and worker graceful shutdown.
 - Liveness and readiness endpoints.
 - Compatibility aliases for current text job routes.
+- Internal-key protection for all AI and semantic catalog routes.
+- Authenticated browser integration through `cotizador-core-backend`.
 
 ## Run locally
 
@@ -37,7 +41,7 @@ The existing AI backends remain active while capabilities are migrated increment
 cp .env.example .env
 docker compose up -d postgres redis
 pnpm install
-pnpm prisma:migrate -- --name initialize-ai-jobs
+pnpm prisma:migrate
 pnpm dev:api
 ```
 
@@ -64,6 +68,9 @@ GET  /api/v1/jobs/:id
 GET  /api/v1/jobs/:id/result
 POST /api/v1/catalog/search/semantic
 POST /api/v1/catalog/search/hybrid
+POST /api/v1/catalog/index-jobs
+GET  /api/v1/catalog/evaluation/cases
+POST /api/v1/catalog/evaluation-jobs
 ```
 
 Temporary compatibility aliases:
@@ -89,10 +96,6 @@ PUT  /api/local-products-semantic/:productId
 DELETE /api/local-products-semantic/:productId
 ```
 
-## Next migration slices
+All `/api` endpoints require the configured internal key. The core backend owns browser authentication and proxies the compatibility routes.
 
-1. Catalog indexing, hybrid ranking and evaluation from `tuvansa-backend-gpt`.
-2. Point the current consumers to the compatibility routes and validate in parallel.
-3. Retire old AI routes after frontend cutover validation.
-
-See `docs/semantic-cutover.md` for the progressive migration settings.
+See `docs/semantic-cutover.md`, `docs/deployment.md` and `docs/legacy-retirement.md` for production operation and retirement gates.

@@ -1,4 +1,5 @@
 @baseUrl = http://localhost:4700
+@internalApiKey = replace-me
 @jobId = replace-me
 
 ### Liveness
@@ -9,6 +10,7 @@ GET {{baseUrl}}/health/ready
 
 ### Create quote text extraction job
 POST {{baseUrl}}/api/v1/extractions/text
+X-Internal-API-Key: {{internalApiKey}}
 Content-Type: application/json
 
 {
@@ -18,6 +20,7 @@ Content-Type: application/json
 
 ### Create quote document extraction job
 POST {{baseUrl}}/api/v1/extractions/documents
+X-Internal-API-Key: {{internalApiKey}}
 Content-Type: multipart/form-data; boundary=QuoteBoundary
 
 --QuoteBoundary
@@ -29,6 +32,7 @@ Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 
 ### Current-compatible create route
 POST {{baseUrl}}/api/extract/jobs/text
+X-Internal-API-Key: {{internalApiKey}}
 Content-Type: application/json
 
 {
@@ -38,6 +42,7 @@ Content-Type: application/json
 
 ### Create seller-completed quote Excel job
 POST {{baseUrl}}/api/v1/extractions/quoted-excel
+X-Internal-API-Key: {{internalApiKey}}
 Content-Type: multipart/form-data; boundary=QuotedExcelBoundary
 
 --QuotedExcelBoundary
@@ -49,6 +54,7 @@ Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 
 ### Create supplier quote extraction job
 POST {{baseUrl}}/api/v1/extractions/supplier-quotes
+X-Internal-API-Key: {{internalApiKey}}
 Content-Type: multipart/form-data; boundary=SupplierQuoteBoundary
 
 --SupplierQuoteBoundary
@@ -60,6 +66,7 @@ Content-Type: application/pdf
 
 ### Current-compatible seller Excel route
 POST {{baseUrl}}/api/extract/jobs/quoted-excel
+X-Internal-API-Key: {{internalApiKey}}
 Content-Type: multipart/form-data; boundary=QuotedExcelCompatibilityBoundary
 
 --QuotedExcelCompatibilityBoundary
@@ -71,6 +78,7 @@ Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
 
 ### Current-compatible supplier quote route
 POST {{baseUrl}}/api/extract/jobs/supplier-quote
+X-Internal-API-Key: {{internalApiKey}}
 Content-Type: multipart/form-data; boundary=SupplierCompatibilityBoundary
 
 --SupplierCompatibilityBoundary
@@ -82,12 +90,15 @@ Content-Type: application/pdf
 
 ### Job status
 GET {{baseUrl}}/api/v1/jobs/{{jobId}}
+X-Internal-API-Key: {{internalApiKey}}
 
 ### Job result
 GET {{baseUrl}}/api/v1/jobs/{{jobId}}/result
+X-Internal-API-Key: {{internalApiKey}}
 
 ### Normalize missing products (async)
 POST {{baseUrl}}/api/v1/assistance/missing-products/normalize
+X-Internal-API-Key: {{internalApiKey}}
 Content-Type: application/json
 
 {
@@ -103,6 +114,7 @@ Content-Type: application/json
 
 ### Normalize missing products (current synchronous compatibility route)
 POST {{baseUrl}}/api/products/normalize-missing
+X-Internal-API-Key: {{internalApiKey}}
 Content-Type: application/json
 
 {
@@ -118,6 +130,7 @@ Content-Type: application/json
 
 ### Suggest technical data (current synchronous compatibility route)
 POST {{baseUrl}}/api/procurement/technical-data/suggest
+X-Internal-API-Key: {{internalApiKey}}
 Content-Type: application/json
 
 {
@@ -128,6 +141,7 @@ Content-Type: application/json
 
 ### Suggest technical data in batch
 POST {{baseUrl}}/api/procurement/technical-data/suggest-batch
+X-Internal-API-Key: {{internalApiKey}}
 Content-Type: application/json
 
 {
@@ -141,6 +155,7 @@ Content-Type: application/json
 
 ### Suggest quote catalog internal code
 POST {{baseUrl}}/api/quote-catalogs/suggest-code
+X-Internal-API-Key: {{internalApiKey}}
 Content-Type: application/json
 
 {
