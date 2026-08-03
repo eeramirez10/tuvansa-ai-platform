@@ -39,6 +39,17 @@ export interface WorkerConfig extends BaseConfig {
   jobAttempts: number;
   workerConcurrency: number;
   structuredAiPromptVersion: string;
+  pineconeApiKey?: string;
+  pineconeCatalogIndex: string;
+  pineconeCatalogVariantsNamespace: string;
+  voyageApiKey?: string;
+  voyageModel: string;
+  voyageDimension: number;
+  voyageMinRequestIntervalMs: number;
+  mysqlHost?: string;
+  mysqlUser?: string;
+  mysqlPassword?: string;
+  mysqlDatabase?: string;
 }
 
 function loadBaseConfig(): BaseConfig {
@@ -96,5 +107,20 @@ export function loadWorkerConfig(): WorkerConfig {
     jobAttempts: get("JOB_ATTEMPTS").default("3").asIntPositive(),
     workerConcurrency: get("WORKER_CONCURRENCY").default("2").asIntPositive(),
     structuredAiPromptVersion: get("STRUCTURED_AI_PROMPT_VERSION").default("structured-ai-v1").asString(),
+    pineconeApiKey: get("PINECONE_API_KEY").asString() || undefined,
+    pineconeCatalogIndex: get("PINECONE_CATALOG_V2_INDEX").default("proscai-catalog-v2").asString(),
+    pineconeCatalogVariantsNamespace: get("PINECONE_CATALOG_VARIANTS_NAMESPACE")
+      .default("catalog-variants-v1")
+      .asString(),
+    voyageApiKey: get("VOYAGEAI_API_KEY").asString() || undefined,
+    voyageModel: get("VOYAGE_CATALOG_V2_MODEL").default("voyage-4-large").asString(),
+    voyageDimension: get("VOYAGE_CATALOG_V2_DIMENSION").default("1024").asIntPositive(),
+    voyageMinRequestIntervalMs: get("VOYAGE_CATALOG_V2_MIN_REQUEST_INTERVAL_MS")
+      .default("100")
+      .asIntPositive(),
+    mysqlHost: get("URL_MYSQL").asString() || undefined,
+    mysqlUser: get("USER_MYSQL").asString() || undefined,
+    mysqlPassword: get("PASSWORD_MYSQL").asString() || undefined,
+    mysqlDatabase: get("DB_MYSQL").asString() || undefined,
   };
 }

@@ -22,6 +22,13 @@ import { ProcessStructuredAiJobUseCase } from "../modules/ai-assistance/applicat
 import { OpenAiCatalogCodeProcessor } from "../modules/ai-assistance/infrastructure/openai-catalog-code.processor";
 import { OpenAiMissingProductsProcessor } from "../modules/ai-assistance/infrastructure/openai-missing-products.processor";
 import { OpenAiTechnicalDataProcessor } from "../modules/ai-assistance/infrastructure/openai-technical-data.processor";
+import { BuildProscaiCatalogVariantsUseCase } from "../modules/semantic-catalog/application/use-cases/build-proscai-catalog-variants.use-case";
+import { ProcessVectorCatalogSyncJobUseCase } from "../modules/semantic-catalog/application/use-cases/process-vector-catalog-sync-job.use-case";
+import { SyncProscaiCatalogVariantsUseCase } from "../modules/semantic-catalog/application/use-cases/sync-proscai-catalog-variants.use-case";
+import { MysqlProscaiCatalogVariantDatasource } from "../modules/semantic-catalog/infrastructure/mysql-proscai-catalog-variant.datasource";
+import { PineconeVectorIndexAdapter } from "../modules/semantic-catalog/infrastructure/pinecone-vector-index.adapter";
+import { ProscaiCatalogNormalizerService } from "../modules/semantic-catalog/infrastructure/proscai-catalog-normalizer.service";
+import { VoyageTextEmbeddingAdapter } from "../modules/semantic-catalog/infrastructure/voyage-text-embedding.adapter";
 
 export interface WorkerRuntime {
   start(): void;
@@ -68,6 +75,7 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
     quotedExcelExtractor,
     supplierQuoteExtractor,
   );
+  const catalogSync = composeCatalogSyncProcessor(config, repository);
   let worker: Worker<EnqueueJobInput> | undefined;
 
   return {
@@ -94,6 +102,13 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
             }
             if (job.data.type === AiJobType.QUOTE_CATALOG_CODE_SUGGESTION) {
               await catalogCodeProcessor.execute(job.data.jobId);
+              return;
+            }
+            if (job.data.type === AiJobType.VECTOR_CATALOG_SYNC) {
+              if (!catalogSync.processor) {
+                throw new UnrecoverableError("Vector catalog synchronization is not configured.");
+              }
+              await catalogSync.processor.execute(job.data.jobId);
               return;
             }
             throw new UnrecoverableError(`Unsupported job type: ${job.data.type}`);
@@ -137,6 +152,7 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
     },
     close: async () => {
       if (worker) await worker.close();
+      if (catalogSync.datasource) await catalogSync.datasource.close();
       await redis.quit();
       await prisma.$disconnect();
     },
@@ -159,5 +175,57 @@ function errorCodeFor(type: AiJobType): string {
   if (type === AiJobType.SUPPLIER_QUOTE_EXTRACTION) return "SUPPLIER_QUOTE_EXTRACTION_FAILED";
   if (type === AiJobType.QUOTE_TEXT_EXTRACTION) return "QUOTE_TEXT_EXTRACTION_FAILED";
   if (type === AiJobType.QUOTE_DOCUMENT_EXTRACTION) return "QUOTE_DOCUMENT_EXTRACTION_FAILED";
+  if (type === AiJobType.VECTOR_CATALOG_SYNC) return "VECTOR_CATALOG_SYNC_FAILED";
   return "AI_JOB_PROCESSING_FAILED";
+}
+
+function composeCatalogSyncProcessor(
+  config: WorkerConfig,
+  repository: PrismaAiJobRepository,
+): {
+  processor?: ProcessVectorCatalogSyncJobUseCase;
+  datasource?: MysqlProscaiCatalogVariantDatasource;
+} {
+  const required = [
+    config.pineconeApiKey,
+    config.voyageApiKey,
+    config.mysqlHost,
+    config.mysqlUser,
+    config.mysqlPassword,
+    config.mysqlDatabase,
+  ];
+  if (required.some((value) => !value)) return {};
+
+  const datasource = new MysqlProscaiCatalogVariantDatasource({
+    host: config.mysqlHost!,
+    user: config.mysqlUser!,
+    password: config.mysqlPassword!,
+    database: config.mysqlDatabase!,
+  });
+  const embeddings = new VoyageTextEmbeddingAdapter(
+    config.voyageApiKey!,
+    config.voyageModel,
+    config.voyageDimension,
+    config.voyageMinRequestIntervalMs,
+  );
+  const vectorIndex = new PineconeVectorIndexAdapter(
+    config.pineconeApiKey!,
+    config.pineconeCatalogIndex,
+    config.pineconeCatalogVariantsNamespace,
+  );
+  const buildVariants = new BuildProscaiCatalogVariantsUseCase(
+    datasource,
+    new ProscaiCatalogNormalizerService(),
+  );
+  const sync = new SyncProscaiCatalogVariantsUseCase(
+    buildVariants,
+    embeddings,
+    vectorIndex,
+    config.voyageModel,
+    config.pineconeCatalogVariantsNamespace,
+  );
+  return {
+    datasource,
+    processor: new ProcessVectorCatalogSyncJobUseCase(repository, sync, config.voyageModel),
+  };
 }

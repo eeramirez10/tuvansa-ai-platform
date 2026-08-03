@@ -18,6 +18,9 @@ import { WaitForAiJobResultUseCase } from "../modules/ai-assistance/application/
 import { AiAssistanceController } from "../modules/ai-assistance/presentation/ai-assistance.controller";
 import { AiAssistanceRoutes } from "../modules/ai-assistance/presentation/ai-assistance.routes";
 import { composeSemanticCatalog } from "./semantic-catalog.composition";
+import { CreateVectorCatalogSyncJobUseCase } from "../modules/semantic-catalog/application/use-cases/create-vector-catalog-sync-job.use-case";
+import { CatalogMaintenanceController } from "../modules/semantic-catalog/presentation/catalog-maintenance.controller";
+import { CatalogMaintenanceRoutes } from "../modules/semantic-catalog/presentation/catalog-maintenance.routes";
 
 export interface ApiRuntime {
   app: Express;
@@ -59,6 +62,16 @@ export function composeApi(config: ApiConfig): ApiRuntime {
   const assistanceController = new AiAssistanceController(createStructuredJob, waitForStructuredResult);
   const assistanceRoutes = new AiAssistanceRoutes(assistanceController);
   const semanticCatalog = composeSemanticCatalog(config);
+  const catalogMaintenanceRoutes = new CatalogMaintenanceRoutes(
+    new CatalogMaintenanceController(
+      new CreateVectorCatalogSyncJobUseCase(
+        repository,
+        queue,
+        "catalog-variant-v1",
+      ),
+      semanticCatalog.enabled,
+    ),
+  );
 
   const app = express();
   app.disable("x-powered-by");
@@ -90,6 +103,7 @@ export function composeApi(config: ApiConfig): ApiRuntime {
   app.use("/api", semanticCatalog.publicRoutes);
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), routes.build());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), assistanceRoutes.build());
+  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), catalogMaintenanceRoutes.build());
   app.use(errorHandler);
 
   return {

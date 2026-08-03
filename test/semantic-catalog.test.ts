@@ -2,12 +2,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ProductAvailabilityPort } from "../src/modules/semantic-catalog/application/ports/product-availability.port";
 import { TextEmbeddingPort } from "../src/modules/semantic-catalog/application/ports/text-embedding.port";
-import { VectorIndexPort, VectorRecord } from "../src/modules/semantic-catalog/application/ports/vector-index.port";
+import {
+  ManageableVectorIndexPort,
+  VectorIndexPort,
+  VectorRecord,
+} from "../src/modules/semantic-catalog/application/ports/vector-index.port";
 import { SemanticCatalogRankingService } from "../src/modules/semantic-catalog/application/services/semantic-catalog-ranking.service";
 import { TechnicalCatalogQueryParserService } from "../src/modules/semantic-catalog/application/services/technical-catalog-query-parser.service";
+import { CatalogVariantVectorDocumentMapper } from "../src/modules/semantic-catalog/application/mappers/catalog-variant-vector-document.mapper";
+import { BuildProscaiCatalogVariantsUseCase } from "../src/modules/semantic-catalog/application/use-cases/build-proscai-catalog-variants.use-case";
 import { LocalProductSemanticUseCase } from "../src/modules/semantic-catalog/application/use-cases/local-product-semantic.use-case";
 import { SearchSemanticCatalogUseCase } from "../src/modules/semantic-catalog/application/use-cases/search-semantic-catalog.use-case";
-import { ProductAvailability, VectorMatch } from "../src/modules/semantic-catalog/domain/semantic-catalog.types";
+import { SyncProscaiCatalogVariantsUseCase } from "../src/modules/semantic-catalog/application/use-cases/sync-proscai-catalog-variants.use-case";
+import { ProscaiCatalogVariantDatasource } from "../src/modules/semantic-catalog/domain/datasources/proscai-catalog-variant.datasource";
+import { ProscaiCatalogVariantSourceRecord } from "../src/modules/semantic-catalog/domain/entities/proscai-catalog-variant.entity";
+import { ProductAvailability, VectorMatch, VectorMetadata } from "../src/modules/semantic-catalog/domain/semantic-catalog.types";
+import { ProscaiCatalogNormalizerService } from "../src/modules/semantic-catalog/infrastructure/proscai-catalog-normalizer.service";
 import { SemanticCatalogPresenter } from "../src/modules/semantic-catalog/presentation/semantic-catalog.presenter";
 
 class FakeEmbeddings implements TextEmbeddingPort {
@@ -53,6 +63,55 @@ class FakeVectorIndex implements VectorIndexPort {
     this.deleted.push(ids);
   }
 }
+
+class FakeManageableVectorIndex extends FakeVectorIndex implements ManageableVectorIndexPort {
+  public ids: string[] = [];
+  public metadata = new Map<string, VectorMetadata>();
+
+  public async findMetadata(ids: string[]): Promise<Map<string, VectorMetadata>> {
+    return new Map(ids.flatMap((id) => {
+      const value = this.metadata.get(id);
+      return value ? [[id, value] as const] : [];
+    }));
+  }
+
+  public async listIds(prefix = ""): Promise<string[]> {
+    return this.ids.filter((id) => id.startsWith(prefix));
+  }
+}
+
+class FakeVariantDatasource extends ProscaiCatalogVariantDatasource {
+  constructor(private readonly rows: ProscaiCatalogVariantSourceRecord[]) {
+    super();
+  }
+
+  public async findAllSourceRecords(): Promise<ProscaiCatalogVariantSourceRecord[]> {
+    return this.rows;
+  }
+
+  public async close(): Promise<void> {}
+}
+
+const catalogSourceRecord: ProscaiCatalogVariantSourceRecord = {
+  iseq: 1,
+  ean: "TSC440",
+  icod: "01000001",
+  branchCode: "01",
+  branchName: "MEXICO",
+  description1: "TUBO ACERO AL CARBON SIN COSTURA 4 PULGADAS CEDULA 40",
+  description2: "",
+  originalDescription: "TUBO ACERO AL CARBON SIN COSTURA 4 PULGADAS CEDULA 40",
+  fam2: "TUBERIA",
+  fam3: "SIN COSTURA",
+  fam4: "ACERO AL CARBON",
+  fam5: "BISELADO",
+  fam7: "40",
+  fam8: "4",
+  famc: "NEGRO",
+  unit: "METRO",
+  isActive: true,
+  sourceUpdatedAt: "2026-08-01T00:00:00.000Z",
+};
 
 class FakeAvailability implements ProductAvailabilityPort {
   public requestedEans: string[][] = [];
@@ -233,4 +292,64 @@ test("quote semantic response expands ERP codes with branch, stock, currency and
   assert.equal(response.items[0]?.branchProduct?.currency, "MXN");
   assert.equal(response.items[0]?.branchProduct?.lastCost, 120);
   assert.equal(response.items[0]?.stockAvailableInBranch, true);
+});
+
+test("catalog dry run detects changes without embedding or mutating Pinecone", async () => {
+  const embeddings = new FakeEmbeddings();
+  const index = new FakeManageableVectorIndex();
+  const build = new BuildProscaiCatalogVariantsUseCase(
+    new FakeVariantDatasource([catalogSourceRecord]),
+    new ProscaiCatalogNormalizerService(),
+  );
+  const useCase = new SyncProscaiCatalogVariantsUseCase(
+    build,
+    embeddings,
+    index,
+    "voyage-test",
+    "catalog-test",
+  );
+
+  const result = await useCase.execute({ maxVariants: 1, dryRun: true });
+
+  assert.equal(result.changed, 1);
+  assert.equal(result.unchanged, 0);
+  assert.equal(result.embedded, 0);
+  assert.equal(result.upserted, 0);
+  assert.equal(result.deleted, 0);
+  assert.equal(result.fullReconciliation, false);
+  assert.equal(embeddings.documentCalls.length, 0);
+  assert.equal(index.upserted.length, 0);
+  assert.equal(index.deleted.length, 0);
+});
+
+test("full catalog synchronization keeps current vectors and deletes only stale ids", async () => {
+  const embeddings = new FakeEmbeddings();
+  const index = new FakeManageableVectorIndex();
+  const build = new BuildProscaiCatalogVariantsUseCase(
+    new FakeVariantDatasource([catalogSourceRecord]),
+    new ProscaiCatalogNormalizerService(),
+  );
+  const projection = await build.execute(true);
+  const variant = projection.variants[0]!;
+  const document = CatalogVariantVectorDocumentMapper.toDocument(variant, "voyage-test");
+  index.ids = [document.id, "proscai-stale"];
+  index.metadata.set(document.id, document.metadata as unknown as VectorMetadata);
+  const useCase = new SyncProscaiCatalogVariantsUseCase(
+    build,
+    embeddings,
+    index,
+    "voyage-test",
+    "catalog-test",
+  );
+
+  const result = await useCase.execute({ dryRun: false, deleteStale: true });
+
+  assert.equal(result.unchanged, 1);
+  assert.equal(result.changed, 0);
+  assert.equal(result.embedded, 0);
+  assert.equal(result.upserted, 0);
+  assert.equal(result.stale, 1);
+  assert.equal(result.deleted, 1);
+  assert.equal(result.fullReconciliation, true);
+  assert.deepEqual(index.deleted, [["proscai-stale"]]);
 });

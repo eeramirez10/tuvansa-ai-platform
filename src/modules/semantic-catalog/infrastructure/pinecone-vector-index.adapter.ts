@@ -1,8 +1,8 @@
 import { Index, Pinecone, RecordMetadata } from "@pinecone-database/pinecone";
-import { VectorIndexPort, VectorRecord } from "../application/ports/vector-index.port";
-import { VectorMatch } from "../domain/semantic-catalog.types";
+import { ManageableVectorIndexPort, VectorRecord } from "../application/ports/vector-index.port";
+import { VectorMatch, VectorMetadata } from "../domain/semantic-catalog.types";
 
-export class PineconeVectorIndexAdapter implements VectorIndexPort {
+export class PineconeVectorIndexAdapter implements ManageableVectorIndexPort {
   private readonly index: Index<RecordMetadata>;
 
   constructor(apiKey: string, indexName: string, namespace: string) {
@@ -42,5 +42,31 @@ export class PineconeVectorIndexAdapter implements VectorIndexPort {
   public async delete(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     await this.index.deleteMany(ids);
+  }
+
+  public async findMetadata(ids: string[]): Promise<Map<string, VectorMetadata>> {
+    if (ids.length === 0) return new Map();
+    const result = await this.index.fetch(ids);
+    return new Map(Object.entries(result.records ?? {}).map(([id, record]) => [
+      id,
+      (record.metadata ?? {}) as VectorMetadata,
+    ]));
+  }
+
+  public async listIds(prefix = ""): Promise<string[]> {
+    const ids: string[] = [];
+    let paginationToken: string | undefined;
+    do {
+      const result = await this.index.listPaginated({
+        prefix,
+        limit: 100,
+        ...(paginationToken ? { paginationToken } : {}),
+      });
+      for (const vector of result.vectors ?? []) {
+        if (vector.id) ids.push(vector.id);
+      }
+      paginationToken = result.pagination?.next;
+    } while (paginationToken);
+    return ids;
   }
 }
