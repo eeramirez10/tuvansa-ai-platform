@@ -28,7 +28,10 @@ export class ProcessTextExtractionJobUseCase {
       const extraction = await this.extractor.extract(input.text);
       await this.repository.updateProgress(jobId, 90);
       const result = {
+        file_name: `TEXT_${input.source}`,
+        file_type: "text",
         source: input.source,
+        items_count: extraction.items.length,
         items: extraction.items.map((item) => item.toPrimitives()),
       };
 

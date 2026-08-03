@@ -16,15 +16,18 @@ export class CreateDocumentExtractionJobUseCase {
     private readonly maxFileSizeBytes: number,
   ) {}
 
-  public async execute(file: UploadedDocument) {
-    this.validate(file);
+  public async execute(
+    file: UploadedDocument,
+    jobType: AiJobType = AiJobType.QUOTE_DOCUMENT_EXTRACTION,
+  ) {
+    this.validate(file, jobType);
     const inputHash = createHash("sha256").update(file.buffer).digest("hex");
-    const idempotencyKey = [AiJobType.QUOTE_DOCUMENT_EXTRACTION, this.promptVersion, inputHash].join(":");
+    const idempotencyKey = [jobType, this.promptVersion, inputHash].join(":");
     const stored = await this.storage.save(file);
 
     try {
       const creation = await this.repository.createOrFind({
-        type: AiJobType.QUOTE_DOCUMENT_EXTRACTION,
+        type: jobType,
         idempotencyKey,
         inputHash,
         input: stored,
@@ -52,12 +55,19 @@ export class CreateDocumentExtractionJobUseCase {
     }
   }
 
-  private validate(file: UploadedDocument): void {
+  private validate(file: UploadedDocument, jobType: AiJobType): void {
     if (!file.buffer.length) throw new AppError("File is required.", 400, "FILE_REQUIRED");
     if (file.buffer.length > this.maxFileSizeBytes) {
       throw new AppError("File exceeds the configured size limit.", 413, "FILE_TOO_LARGE");
     }
     const extension = path.extname(file.originalName).toLowerCase();
+    if (jobType === AiJobType.QUOTED_EXCEL_EXTRACTION && ![".xlsx", ".xls"].includes(extension)) {
+      throw new AppError(
+        "La cotizacion importada debe ser un archivo XLSX o XLS.",
+        400,
+        "QUOTED_EXCEL_FILE_REQUIRED",
+      );
+    }
     if (![".pdf", ".xlsx", ".xls"].includes(extension)) {
       throw new AppError("Unsupported file. Use PDF, XLSX or XLS.", 400, "UNSUPPORTED_DOCUMENT_TYPE");
     }

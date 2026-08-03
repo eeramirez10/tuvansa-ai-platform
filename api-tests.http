@@ -36,6 +36,50 @@ Content-Type: application/json
   "source": "email"
 }
 
+### Create seller-completed quote Excel job
+POST {{baseUrl}}/api/v1/extractions/quoted-excel
+Content-Type: multipart/form-data; boundary=QuotedExcelBoundary
+
+--QuotedExcelBoundary
+Content-Disposition: form-data; name="file"; filename="seller-quote.xlsx"
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+< ./fixtures/seller-quote.xlsx
+--QuotedExcelBoundary--
+
+### Create supplier quote extraction job
+POST {{baseUrl}}/api/v1/extractions/supplier-quotes
+Content-Type: multipart/form-data; boundary=SupplierQuoteBoundary
+
+--SupplierQuoteBoundary
+Content-Disposition: form-data; name="file"; filename="supplier-quote.pdf"
+Content-Type: application/pdf
+
+< ./fixtures/supplier-quote.pdf
+--SupplierQuoteBoundary--
+
+### Current-compatible seller Excel route
+POST {{baseUrl}}/api/extract/jobs/quoted-excel
+Content-Type: multipart/form-data; boundary=QuotedExcelCompatibilityBoundary
+
+--QuotedExcelCompatibilityBoundary
+Content-Disposition: form-data; name="file"; filename="seller-quote.xlsx"
+Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+< ./fixtures/seller-quote.xlsx
+--QuotedExcelCompatibilityBoundary--
+
+### Current-compatible supplier quote route
+POST {{baseUrl}}/api/extract/jobs/supplier-quote
+Content-Type: multipart/form-data; boundary=SupplierCompatibilityBoundary
+
+--SupplierCompatibilityBoundary
+Content-Disposition: form-data; name="file"; filename="supplier-quote.pdf"
+Content-Type: application/pdf
+
+< ./fixtures/supplier-quote.pdf
+--SupplierCompatibilityBoundary--
+
 ### Job status
 GET {{baseUrl}}/api/v1/jobs/{{jobId}}
 

@@ -6,7 +6,8 @@ import { CreateDocumentExtractionJobUseCase } from "../src/modules/document-extr
 import { DocumentStoragePort } from "../src/modules/document-extraction/application/ports/document-storage.port";
 import { StoredDocument, UploadedDocument } from "../src/modules/document-extraction/domain/document-file";
 import { XlsxTextReader } from "../src/modules/document-extraction/infrastructure/files/xlsx-text-reader";
-import { AiJob, AiJobStatus } from "../src/modules/job-management/domain/ai-job.entity";
+import { AiJob, AiJobStatus, AiJobType } from "../src/modules/job-management/domain/ai-job.entity";
+import { AppError } from "../src/shared/domain/app-error";
 import {
   AiJobRepository,
   AiRunInput,
@@ -110,4 +111,25 @@ test("creates one document job and removes only the duplicate upload", async () 
   assert.equal(duplicate.created, false);
   assert.equal(queue.messages.length, 1);
   assert.deepEqual(storage.removed, ["/tmp/file-2-quote.xlsx"]);
+});
+
+test("rejects non-Excel files for quoted Excel jobs before storing them", async () => {
+  const storage = new FakeStorage();
+  const useCase = new CreateDocumentExtractionJobUseCase(
+    new FakeRepository(),
+    new FakeQueue(),
+    storage,
+    "quote-items-v1",
+    1024,
+  );
+
+  await assert.rejects(
+    () => useCase.execute({
+      buffer: Buffer.from("pdf"),
+      originalName: "quote.pdf",
+      mimeType: "application/pdf",
+    }, AiJobType.QUOTED_EXCEL_EXTRACTION),
+    (error: unknown) => error instanceof AppError && error.code === "QUOTED_EXCEL_FILE_REQUIRED",
+  );
+  assert.deepEqual(storage.removed, []);
 });

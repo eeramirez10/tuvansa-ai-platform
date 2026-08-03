@@ -9,6 +9,8 @@ import { PdfDigitalReconciliationService } from "../modules/document-extraction/
 import { PdfDigitalTextReader } from "../modules/document-extraction/infrastructure/files/pdf-digital-text-reader";
 import { XlsxTextReader } from "../modules/document-extraction/infrastructure/files/xlsx-text-reader";
 import { OpenAiQuoteTextExtractorAdapter } from "../modules/document-extraction/infrastructure/openai-quote-text-extractor.adapter";
+import { OpenAiQuotedExcelExtractorAdapter } from "../modules/document-extraction/infrastructure/openai-quoted-excel-extractor.adapter";
+import { OpenAiSupplierQuoteExtractorAdapter } from "../modules/document-extraction/infrastructure/openai-supplier-quote-extractor.adapter";
 import { AiJobType } from "../modules/job-management/domain/ai-job.entity";
 import { PrismaAiJobRepository } from "../modules/job-management/infrastructure/prisma-ai-job.repository";
 import { EnqueueJobInput } from "../shared/application/ports/job-queue.port";
@@ -27,6 +29,8 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
   const redis = createWorkerRedisConnection(config.redisUrl);
   const repository = new PrismaAiJobRepository(prisma);
   const quoteExtractor = new OpenAiQuoteTextExtractorAdapter(config.openAiApiKey, config.openAiModel);
+  const quotedExcelExtractor = new OpenAiQuotedExcelExtractorAdapter(config.openAiApiKey, config.openAiModel);
+  const supplierQuoteExtractor = new OpenAiSupplierQuoteExtractorAdapter(config.openAiApiKey, config.openAiModel);
   const storage = new LocalDocumentStorageAdapter(config.documentStorageDirectory);
   const documentExtractor = new DocumentTextExtractorAdapter(
     new DocumentTypeDetector(),
@@ -39,6 +43,8 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
     storage,
     documentExtractor,
     quoteExtractor,
+    quotedExcelExtractor,
+    supplierQuoteExtractor,
   );
   let worker: Worker<EnqueueJobInput> | undefined;
 
@@ -52,7 +58,7 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
               await processTextJob.execute(job.data.jobId);
               return;
             }
-            if (job.data.type === AiJobType.QUOTE_DOCUMENT_EXTRACTION) {
+            if (isDocumentJob(job.data.type)) {
               await processDocumentJob.execute(job.data.jobId);
               return;
             }
@@ -65,7 +71,7 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
             if (finalAttempt || unrecoverable) {
               const code = error instanceof AppError ? error.code : "AI_JOB_PROCESSING_FAILED";
               await repository.markFailed(job.data.jobId, code, message);
-              if (job.data.type === AiJobType.QUOTE_DOCUMENT_EXTRACTION) {
+              if (isDocumentJob(job.data.type)) {
                 const currentJob = await repository.findById(job.data.jobId);
                 const stored = currentJob ? processDocumentJob.getStoredFile(currentJob.input) : null;
                 if (stored) await storage.remove(stored.filePath);
@@ -101,4 +107,12 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
       await prisma.$disconnect();
     },
   };
+}
+
+function isDocumentJob(type: AiJobType): boolean {
+  return [
+    AiJobType.QUOTE_DOCUMENT_EXTRACTION,
+    AiJobType.QUOTED_EXCEL_EXTRACTION,
+    AiJobType.SUPPLIER_QUOTE_EXTRACTION,
+  ].includes(type);
 }

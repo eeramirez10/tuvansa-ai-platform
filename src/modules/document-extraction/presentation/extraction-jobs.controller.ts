@@ -3,6 +3,7 @@ import { CreateDocumentExtractionJobUseCase } from "../application/use-cases/cre
 import { CreateTextExtractionJobUseCase, TextExtractionSource } from "../application/use-cases/create-text-extraction-job.use-case";
 import { GetAiJobUseCase } from "../../job-management/application/use-cases/get-ai-job.use-case";
 import { AiJobStatus } from "../../job-management/domain/ai-job.entity";
+import { AiJobType } from "../../job-management/domain/ai-job.entity";
 
 const SOURCES = new Set<TextExtractionSource>(["email", "whatsapp", "manual", "ai_assistant"]);
 
@@ -26,6 +27,22 @@ export class ExtractionJobsController {
   };
 
   public createFromDocument = async (req: Request, res: Response): Promise<void> => {
+    await this.createFileJob(req, res, AiJobType.QUOTE_DOCUMENT_EXTRACTION);
+  };
+
+  public createFromQuotedExcel = async (req: Request, res: Response): Promise<void> => {
+    await this.createFileJob(req, res, AiJobType.QUOTED_EXCEL_EXTRACTION);
+  };
+
+  public createFromSupplierQuote = async (req: Request, res: Response): Promise<void> => {
+    await this.createFileJob(req, res, AiJobType.SUPPLIER_QUOTE_EXTRACTION);
+  };
+
+  private createFileJob = async (
+    req: Request,
+    res: Response,
+    type: AiJobType,
+  ): Promise<void> => {
     if (!req.file) {
       res.status(400).json({ error: "File is required in the 'file' field.", code: "FILE_REQUIRED" });
       return;
@@ -34,7 +51,7 @@ export class ExtractionJobsController {
       buffer: req.file.buffer,
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
-    });
+    }, type);
     this.respondCreated(res, creation);
   };
 

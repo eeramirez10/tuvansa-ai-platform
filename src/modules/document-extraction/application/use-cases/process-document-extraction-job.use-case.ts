@@ -4,7 +4,14 @@ import { AiJobType } from "../../../job-management/domain/ai-job.entity";
 import { StoredDocument } from "../../domain/document-file";
 import { DocumentStoragePort } from "../ports/document-storage.port";
 import { DocumentTextExtractorPort } from "../ports/document-text-extractor.port";
-import { QuoteTextExtractorPort } from "../ports/quote-text-extractor.port";
+import { AiUsage, QuoteTextExtractorPort } from "../ports/quote-text-extractor.port";
+import { QuotedExcelExtractorPort } from "../ports/quoted-excel-extractor.port";
+import { SupplierQuoteExtractorPort } from "../ports/supplier-quote-extractor.port";
+
+interface ProcessedDocument {
+  result: unknown;
+  usage: AiUsage;
+}
 
 export class ProcessDocumentExtractionJobUseCase {
   constructor(
@@ -12,12 +19,14 @@ export class ProcessDocumentExtractionJobUseCase {
     private readonly storage: DocumentStoragePort,
     private readonly documentExtractor: DocumentTextExtractorPort,
     private readonly quoteExtractor: QuoteTextExtractorPort,
+    private readonly quotedExcelExtractor: QuotedExcelExtractorPort,
+    private readonly supplierQuoteExtractor: SupplierQuoteExtractorPort,
   ) {}
 
   public async execute(jobId: string): Promise<void> {
     const job = await this.repository.markProcessing(jobId, 10);
     if (!job) return;
-    if (job.type !== AiJobType.QUOTE_DOCUMENT_EXTRACTION) {
+    if (!this.isDocumentJob(job.type)) {
       throw new AppError(`Unsupported job type: ${job.type}`, 400, "UNSUPPORTED_JOB_TYPE");
     }
 
@@ -37,7 +46,7 @@ export class ProcessDocumentExtractionJobUseCase {
       const promptText = documentText.extractionHints
         ? `${documentText.textContent}\n\nEXTRACTION_HINTS\n${documentText.extractionHints}`
         : documentText.textContent;
-      const extraction = await this.quoteExtractor.extract(promptText);
+      const extraction = await this.extractByType(job.type, promptText, input, documentText.fileType);
       await this.repository.updateProgress(jobId, 90);
 
       await this.repository.recordRun({
@@ -51,11 +60,7 @@ export class ProcessDocumentExtractionJobUseCase {
         latencyMs: extraction.usage.latencyMs,
         succeeded: true,
       });
-      await this.repository.markCompleted(jobId, {
-        file_name: input.fileName,
-        file_type: documentText.fileType,
-        items: extraction.items.map((item) => item.toPrimitives()),
-      });
+      await this.repository.markCompleted(jobId, extraction.result);
       await this.storage.remove(input.filePath);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown document extraction error.";
@@ -67,11 +72,62 @@ export class ProcessDocumentExtractionJobUseCase {
         promptVersion: job.promptVersion ?? undefined,
         latencyMs: Date.now() - startedAt,
         succeeded: false,
-        errorCode: error instanceof AppError ? error.code : "QUOTE_DOCUMENT_EXTRACTION_FAILED",
+        errorCode: error instanceof AppError ? error.code : this.errorCode(job.type),
         errorMessage: message,
       });
       throw error;
     }
+  }
+
+  private async extractByType(
+    type: AiJobType,
+    text: string,
+    input: StoredDocument,
+    fileType: string,
+  ): Promise<ProcessedDocument> {
+    if (type === AiJobType.QUOTED_EXCEL_EXTRACTION) {
+      const extraction = await this.quotedExcelExtractor.extract(text);
+      return {
+        result: {
+          file_name: input.fileName,
+          file_type: "xlsx",
+          import_type: "quoted_excel",
+          items_count: extraction.items.length,
+          items: extraction.items.map((item) => item.toPrimitives()),
+        },
+        usage: extraction.usage,
+      };
+    }
+
+    if (type === AiJobType.SUPPLIER_QUOTE_EXTRACTION) {
+      const extraction = await this.supplierQuoteExtractor.extract(text, input.fileName);
+      return { result: extraction.result, usage: extraction.usage };
+    }
+
+    const extraction = await this.quoteExtractor.extract(text);
+    return {
+      result: {
+        file_name: input.fileName,
+        file_type: fileType,
+        items_count: extraction.items.length,
+        items: extraction.items.map((item) => item.toPrimitives()),
+      },
+      usage: extraction.usage,
+    };
+  }
+
+  private isDocumentJob(type: AiJobType): boolean {
+    return [
+      AiJobType.QUOTE_DOCUMENT_EXTRACTION,
+      AiJobType.QUOTED_EXCEL_EXTRACTION,
+      AiJobType.SUPPLIER_QUOTE_EXTRACTION,
+    ].includes(type);
+  }
+
+  private errorCode(type: AiJobType): string {
+    if (type === AiJobType.QUOTED_EXCEL_EXTRACTION) return "QUOTED_EXCEL_EXTRACTION_FAILED";
+    if (type === AiJobType.SUPPLIER_QUOTE_EXTRACTION) return "SUPPLIER_QUOTE_EXTRACTION_FAILED";
+    return "QUOTE_DOCUMENT_EXTRACTION_FAILED";
   }
 
   public getStoredFile(input: unknown): StoredDocument | null {

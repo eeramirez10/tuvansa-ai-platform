@@ -28,8 +28,8 @@
 
 1. Text quote extraction.
 2. PDF/XLSX quote extraction.
-3. Seller quote Excel extraction.
-4. Supplier quote extraction.
+3. Seller quote Excel extraction. Migrated.
+4. Supplier quote extraction. Migrated.
 5. Technical data and catalog code suggestions.
 6. Local product vector lifecycle.
 7. Catalog semantic search and ranking.

@@ -8,6 +8,9 @@ import {
   DetectedLanguage,
   QuoteItem,
 } from "../domain/quote-item.entity";
+import { LanguageDetectorService } from "./normalization/language-detector.service";
+import { QuantityNormalizerService } from "./normalization/quantity-normalizer.service";
+import { UnitNormalizerService } from "./normalization/unit-normalizer.service";
 
 const ALLOWED_UNITS = new Set<CanonicalUnit>(["kg", "m", "ft", "pza", "tramo", "se"]);
 const ALLOWED_LANGUAGES = new Set<DetectedLanguage>(["es", "en", "mixed"]);
@@ -15,7 +18,13 @@ const ALLOWED_LANGUAGES = new Set<DetectedLanguage>(["es", "en", "mixed"]);
 export class OpenAiQuoteTextExtractorAdapter implements QuoteTextExtractorPort {
   private readonly client: OpenAI;
 
-  constructor(apiKey: string, private readonly model: string) {
+  constructor(
+    apiKey: string,
+    private readonly model: string,
+    private readonly unitNormalizer = new UnitNormalizerService(),
+    private readonly quantityNormalizer = new QuantityNormalizerService(),
+    private readonly languageDetector = new LanguageDetectorService(),
+  ) {
     this.client = new OpenAI({ apiKey });
   }
 
@@ -98,16 +107,17 @@ export class OpenAiQuoteTextExtractorAdapter implements QuoteTextExtractorPort {
       const descriptionOriginal = this.text(raw.description_original);
       if (!descriptionOriginal) return [];
       const descriptionNormalized = this.text(raw.description_normalizada) || descriptionOriginal;
-      const quantity = typeof raw.cantidad === "number" && Number.isFinite(raw.cantidad)
-        ? raw.cantidad
-        : null;
+      const quantity = this.quantityNormalizer.normalize(raw.cantidad);
       const originalUnit = this.text(raw.unidad_original) || null;
-      const normalizedUnit = ALLOWED_UNITS.has(raw.unidad_normalizada as CanonicalUnit)
+      const modelUnit = ALLOWED_UNITS.has(raw.unidad_normalizada as CanonicalUnit)
         ? raw.unidad_normalizada as CanonicalUnit
         : null;
+      const normalizedUnit = modelUnit ??
+        this.unitNormalizer.normalize(originalUnit) ??
+        this.unitNormalizer.detectFromDescription(descriptionOriginal);
       const language = ALLOWED_LANGUAGES.has(raw.idioma as DetectedLanguage)
         ? raw.idioma as DetectedLanguage
-        : "mixed";
+        : this.languageDetector.detect(`${descriptionOriginal} ${descriptionNormalized}`);
 
       return [new QuoteItem({
         descriptionOriginal,
