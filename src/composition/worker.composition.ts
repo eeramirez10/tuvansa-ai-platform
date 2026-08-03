@@ -18,6 +18,10 @@ import { AppError } from "../shared/domain/app-error";
 import { createPrismaClient } from "../shared/infrastructure/database/prisma-client";
 import { AI_JOBS_QUEUE } from "../shared/infrastructure/queue/queue.constants";
 import { createWorkerRedisConnection } from "../shared/infrastructure/queue/redis-connection";
+import { ProcessStructuredAiJobUseCase } from "../modules/ai-assistance/application/use-cases/process-structured-ai-job.use-case";
+import { OpenAiCatalogCodeProcessor } from "../modules/ai-assistance/infrastructure/openai-catalog-code.processor";
+import { OpenAiMissingProductsProcessor } from "../modules/ai-assistance/infrastructure/openai-missing-products.processor";
+import { OpenAiTechnicalDataProcessor } from "../modules/ai-assistance/infrastructure/openai-technical-data.processor";
 
 export interface WorkerRuntime {
   start(): void;
@@ -31,6 +35,24 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
   const quoteExtractor = new OpenAiQuoteTextExtractorAdapter(config.openAiApiKey, config.openAiModel);
   const quotedExcelExtractor = new OpenAiQuotedExcelExtractorAdapter(config.openAiApiKey, config.openAiModel);
   const supplierQuoteExtractor = new OpenAiSupplierQuoteExtractorAdapter(config.openAiApiKey, config.openAiModel);
+  const technicalDataProcessor = new ProcessStructuredAiJobUseCase(
+    repository,
+    AiJobType.TECHNICAL_DATA_SUGGESTION,
+    new OpenAiTechnicalDataProcessor(config.openAiApiKey, config.openAiModel),
+    "TECHNICAL_DATA_SUGGESTION_FAILED",
+  );
+  const missingProductsProcessor = new ProcessStructuredAiJobUseCase(
+    repository,
+    AiJobType.MISSING_PRODUCT_NORMALIZATION,
+    new OpenAiMissingProductsProcessor(config.openAiApiKey, config.openAiModel),
+    "MISSING_PRODUCT_NORMALIZATION_FAILED",
+  );
+  const catalogCodeProcessor = new ProcessStructuredAiJobUseCase(
+    repository,
+    AiJobType.QUOTE_CATALOG_CODE_SUGGESTION,
+    new OpenAiCatalogCodeProcessor(config.openAiApiKey, config.openAiModel),
+    "QUOTE_CATALOG_CODE_SUGGESTION_FAILED",
+  );
   const storage = new LocalDocumentStorageAdapter(config.documentStorageDirectory);
   const documentExtractor = new DocumentTextExtractorAdapter(
     new DocumentTypeDetector(),
@@ -62,6 +84,18 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
               await processDocumentJob.execute(job.data.jobId);
               return;
             }
+            if (job.data.type === AiJobType.TECHNICAL_DATA_SUGGESTION) {
+              await technicalDataProcessor.execute(job.data.jobId);
+              return;
+            }
+            if (job.data.type === AiJobType.MISSING_PRODUCT_NORMALIZATION) {
+              await missingProductsProcessor.execute(job.data.jobId);
+              return;
+            }
+            if (job.data.type === AiJobType.QUOTE_CATALOG_CODE_SUGGESTION) {
+              await catalogCodeProcessor.execute(job.data.jobId);
+              return;
+            }
             throw new UnrecoverableError(`Unsupported job type: ${job.data.type}`);
           } catch (error) {
             const message = error instanceof Error ? error.message : "Unknown worker error.";
@@ -69,7 +103,7 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
             const finalAttempt = job.attemptsMade + 1 >= allowedAttempts;
             const unrecoverable = error instanceof UnrecoverableError || error instanceof AppError;
             if (finalAttempt || unrecoverable) {
-              const code = error instanceof AppError ? error.code : "AI_JOB_PROCESSING_FAILED";
+              const code = error instanceof AppError ? error.code : errorCodeFor(job.data.type);
               await repository.markFailed(job.data.jobId, code, message);
               if (isDocumentJob(job.data.type)) {
                 const currentJob = await repository.findById(job.data.jobId);
@@ -115,4 +149,15 @@ function isDocumentJob(type: AiJobType): boolean {
     AiJobType.QUOTED_EXCEL_EXTRACTION,
     AiJobType.SUPPLIER_QUOTE_EXTRACTION,
   ].includes(type);
+}
+
+function errorCodeFor(type: AiJobType): string {
+  if (type === AiJobType.TECHNICAL_DATA_SUGGESTION) return "TECHNICAL_DATA_SUGGESTION_FAILED";
+  if (type === AiJobType.MISSING_PRODUCT_NORMALIZATION) return "MISSING_PRODUCT_NORMALIZATION_FAILED";
+  if (type === AiJobType.QUOTE_CATALOG_CODE_SUGGESTION) return "QUOTE_CATALOG_CODE_SUGGESTION_FAILED";
+  if (type === AiJobType.QUOTED_EXCEL_EXTRACTION) return "QUOTED_EXCEL_EXTRACTION_FAILED";
+  if (type === AiJobType.SUPPLIER_QUOTE_EXTRACTION) return "SUPPLIER_QUOTE_EXTRACTION_FAILED";
+  if (type === AiJobType.QUOTE_TEXT_EXTRACTION) return "QUOTE_TEXT_EXTRACTION_FAILED";
+  if (type === AiJobType.QUOTE_DOCUMENT_EXTRACTION) return "QUOTE_DOCUMENT_EXTRACTION_FAILED";
+  return "AI_JOB_PROCESSING_FAILED";
 }

@@ -15,6 +15,9 @@ export interface ApiConfig extends BaseConfig {
   jobBackoffMs: number;
   promptVersion: string;
   maxUploadBytes: number;
+  structuredAiPromptVersion: string;
+  compatibilityWaitTimeoutMs: number;
+  compatibilityPollIntervalMs: number;
 }
 
 export interface WorkerConfig extends BaseConfig {
@@ -23,6 +26,7 @@ export interface WorkerConfig extends BaseConfig {
   promptVersion: string;
   jobAttempts: number;
   workerConcurrency: number;
+  structuredAiPromptVersion: string;
 }
 
 function loadBaseConfig(): BaseConfig {
@@ -45,6 +49,9 @@ export function loadApiConfig(): ApiConfig {
     jobBackoffMs: get("JOB_BACKOFF_MS").default("2000").asIntPositive(),
     promptVersion: get("QUOTE_EXTRACTION_PROMPT_VERSION").default("quote-items-v1").asString(),
     maxUploadBytes: get("MAX_UPLOAD_BYTES").default("15728640").asIntPositive(),
+    structuredAiPromptVersion: get("STRUCTURED_AI_PROMPT_VERSION").default("structured-ai-v1").asString(),
+    compatibilityWaitTimeoutMs: get("COMPATIBILITY_WAIT_TIMEOUT_MS").default("60000").asIntPositive(),
+    compatibilityPollIntervalMs: get("COMPATIBILITY_POLL_INTERVAL_MS").default("200").asIntPositive(),
   };
 }
 
@@ -56,5 +63,6 @@ export function loadWorkerConfig(): WorkerConfig {
     promptVersion: get("QUOTE_EXTRACTION_PROMPT_VERSION").default("quote-items-v1").asString(),
     jobAttempts: get("JOB_ATTEMPTS").default("3").asIntPositive(),
     workerConcurrency: get("WORKER_CONCURRENCY").default("2").asIntPositive(),
+    structuredAiPromptVersion: get("STRUCTURED_AI_PROMPT_VERSION").default("structured-ai-v1").asString(),
   };
 }

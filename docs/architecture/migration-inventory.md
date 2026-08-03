@@ -30,7 +30,7 @@
 2. PDF/XLSX quote extraction.
 3. Seller quote Excel extraction. Migrated.
 4. Supplier quote extraction. Migrated.
-5. Technical data and catalog code suggestions.
+5. Technical data, missing product normalization and catalog code suggestions. Migrated.
 6. Local product vector lifecycle.
 7. Catalog semantic search and ranking.
 8. Catalog indexing and evaluation.

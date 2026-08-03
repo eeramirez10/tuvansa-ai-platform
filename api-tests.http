@@ -85,3 +85,66 @@ GET {{baseUrl}}/api/v1/jobs/{{jobId}}
 
 ### Job result
 GET {{baseUrl}}/api/v1/jobs/{{jobId}}/result
+
+### Normalize missing products (async)
+POST {{baseUrl}}/api/v1/assistance/missing-products/normalize
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "item_id": "tmp-1",
+      "description_original": "TUBO ACERO AL CARBON CEDULA 40 4 PULGADAS",
+      "cantidad": 10,
+      "unidad_original": "MTS"
+    }
+  ]
+}
+
+### Normalize missing products (current synchronous compatibility route)
+POST {{baseUrl}}/api/products/normalize-missing
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "item_id": "tmp-1",
+      "description_original": "TUBO ACERO AL CARBON CEDULA 40 4 PULGADAS",
+      "cantidad": 10,
+      "unidad_original": "MTS"
+    }
+  ]
+}
+
+### Suggest technical data (current synchronous compatibility route)
+POST {{baseUrl}}/api/procurement/technical-data/suggest
+Content-Type: application/json
+
+{
+  "requestedDescription": "TUBO ACERO AL CARBON SIN COSTURA 4 PULGADAS CEDULA 40 ASTM A106 GR B",
+  "supplierDescription": "PIPE SMLS A106B 4IN SCH40",
+  "existingAttributes": {}
+}
+
+### Suggest technical data in batch
+POST {{baseUrl}}/api/procurement/technical-data/suggest-batch
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "itemId": "item-1",
+      "requestedDescription": "VALVULA COMPUERTA 2 PULGADAS CLASE 150 BRIDADA"
+    }
+  ]
+}
+
+### Suggest quote catalog internal code
+POST {{baseUrl}}/api/quote-catalogs/suggest-code
+Content-Type: application/json
+
+{
+  "type": "PAYMENT_TERMS",
+  "label": "Pago de contado",
+  "existingCodes": ["NET_30", "NET_60"]
+}

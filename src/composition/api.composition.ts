@@ -13,6 +13,10 @@ import { BullMqJobQueueAdapter } from "../shared/infrastructure/queue/bullmq-job
 import { createProducerRedisConnection } from "../shared/infrastructure/queue/redis-connection";
 import { errorHandler } from "../shared/presentation/error-handler";
 import { internalApiKeyMiddleware } from "../shared/presentation/middleware/internal-api-key.middleware";
+import { CreateStructuredAiJobUseCase } from "../modules/ai-assistance/application/use-cases/create-structured-ai-job.use-case";
+import { WaitForAiJobResultUseCase } from "../modules/ai-assistance/application/use-cases/wait-for-ai-job-result.use-case";
+import { AiAssistanceController } from "../modules/ai-assistance/presentation/ai-assistance.controller";
+import { AiAssistanceRoutes } from "../modules/ai-assistance/presentation/ai-assistance.routes";
 
 export interface ApiRuntime {
   app: Express;
@@ -39,8 +43,20 @@ export function composeApi(config: ApiConfig): ApiRuntime {
     config.maxUploadBytes,
   );
   const getJob = new GetAiJobUseCase(repository);
+  const createStructuredJob = new CreateStructuredAiJobUseCase(
+    repository,
+    queue,
+    config.structuredAiPromptVersion,
+  );
+  const waitForStructuredResult = new WaitForAiJobResultUseCase(
+    repository,
+    config.compatibilityWaitTimeoutMs,
+    config.compatibilityPollIntervalMs,
+  );
   const controller = new ExtractionJobsController(createTextJob, createDocumentJob, getJob);
   const routes = new ExtractionJobsRoutes(controller, config.maxUploadBytes);
+  const assistanceController = new AiAssistanceController(createStructuredJob, waitForStructuredResult);
+  const assistanceRoutes = new AiAssistanceRoutes(assistanceController);
 
   const app = express();
   app.disable("x-powered-by");
@@ -60,6 +76,7 @@ export function composeApi(config: ApiConfig): ApiRuntime {
   });
 
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), routes.build());
+  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), assistanceRoutes.build());
   app.use(errorHandler);
 
   return {

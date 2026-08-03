@@ -15,6 +15,8 @@ export enum AiJobType {
   SEMANTIC_SEARCH = "semantic_search",
   VECTOR_CATALOG_SYNC = "vector_catalog_sync",
   TECHNICAL_DATA_SUGGESTION = "technical_data_suggestion",
+  MISSING_PRODUCT_NORMALIZATION = "missing_product_normalization",
+  QUOTE_CATALOG_CODE_SUGGESTION = "quote_catalog_code_suggestion",
 }
 
 export interface AiJobProps {

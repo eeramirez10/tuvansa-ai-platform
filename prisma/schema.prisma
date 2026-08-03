@@ -24,6 +24,8 @@ enum AiJobType {
   semantic_search
   vector_catalog_sync
   technical_data_suggestion
+  missing_product_normalization
+  quote_catalog_code_suggestion
 }
 
 model AiJob {

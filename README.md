@@ -16,6 +16,10 @@ The existing AI backends remain active while capabilities are migrated increment
 - Digital PDF and XLSX quote extraction with temporary file cleanup.
 - Seller-completed quote Excel extraction with per-item currency and commercial validation.
 - Supplier quote extraction with supplier identity, commercial header, totals, items, evidence and review warnings.
+- Missing product normalization for local temporary products.
+- Technical data suggestions for individual items and batches.
+- AI-assisted internal code generation for quote catalogs.
+- Async jobs for every migrated capability with synchronous compatibility adapters for the current frontend.
 - Compatibility response fields used by the current frontend (`file_name`, `file_type`, `items_count`).
 - Explicit rejection for scanned PDFs that require external OCR.
 - OpenAI structured output adapter.
@@ -48,6 +52,10 @@ POST /api/v1/extractions/text
 POST /api/v1/extractions/documents
 POST /api/v1/extractions/quoted-excel
 POST /api/v1/extractions/supplier-quotes
+POST /api/v1/assistance/missing-products/normalize
+POST /api/v1/assistance/technical-data/suggest
+POST /api/v1/assistance/technical-data/suggest-batch
+POST /api/v1/assistance/quote-catalogs/suggest-code
 GET  /api/v1/jobs/:id
 GET  /api/v1/jobs/:id/result
 ```
@@ -59,13 +67,16 @@ POST /api/extract/jobs/text
 POST /api/extract/jobs
 POST /api/extract/jobs/quoted-excel
 POST /api/extract/jobs/supplier-quote
+POST /api/products/normalize-missing
+POST /api/procurement/technical-data/suggest
+POST /api/procurement/technical-data/suggest-batch
+POST /api/quote-catalogs/suggest-code
 GET  /api/extract/jobs/:id/status
 GET  /api/extract/jobs/:id/result
 ```
 
 ## Next migration slices
 
-1. Technical data suggestions.
-2. Missing product normalization and quote catalog code suggestions.
-3. Semantic catalog search and local product vector synchronization.
-4. Catalog indexing, ranking and evaluation from `tuvansa-backend-gpt`.
+1. Semantic catalog search and local product vector synchronization.
+2. Catalog indexing, ranking and evaluation from `tuvansa-backend-gpt`.
+3. Retire old AI routes after frontend cutover validation.
