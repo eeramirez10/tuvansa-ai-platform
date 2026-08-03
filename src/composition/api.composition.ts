@@ -17,6 +17,7 @@ import { CreateStructuredAiJobUseCase } from "../modules/ai-assistance/applicati
 import { WaitForAiJobResultUseCase } from "../modules/ai-assistance/application/use-cases/wait-for-ai-job-result.use-case";
 import { AiAssistanceController } from "../modules/ai-assistance/presentation/ai-assistance.controller";
 import { AiAssistanceRoutes } from "../modules/ai-assistance/presentation/ai-assistance.routes";
+import { composeSemanticCatalog } from "./semantic-catalog.composition";
 
 export interface ApiRuntime {
   app: Express;
@@ -57,6 +58,7 @@ export function composeApi(config: ApiConfig): ApiRuntime {
   const routes = new ExtractionJobsRoutes(controller, config.maxUploadBytes);
   const assistanceController = new AiAssistanceController(createStructuredJob, waitForStructuredResult);
   const assistanceRoutes = new AiAssistanceRoutes(assistanceController);
+  const semanticCatalog = composeSemanticCatalog(config);
 
   const app = express();
   app.disable("x-powered-by");
@@ -64,7 +66,12 @@ export function composeApi(config: ApiConfig): ApiRuntime {
   app.use(express.json({ limit: "2mb" }));
 
   app.get("/health/live", (_req, res) => {
-    res.json({ ok: true, service: "tuvansa-ai-platform", process: "api" });
+    res.json({
+      ok: true,
+      service: "tuvansa-ai-platform",
+      process: "api",
+      semanticCatalog: semanticCatalog.enabled ? "enabled" : "disabled",
+    });
   });
   app.get("/health/ready", async (_req, res) => {
     try {
@@ -75,6 +82,12 @@ export function composeApi(config: ApiConfig): ApiRuntime {
     }
   });
 
+  app.use(
+    "/api/local-products-semantic",
+    internalApiKeyMiddleware(config.localProductsInternalApiKey),
+    semanticCatalog.localProductRoutes,
+  );
+  app.use("/api", semanticCatalog.publicRoutes);
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), routes.build());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), assistanceRoutes.build());
   app.use(errorHandler);

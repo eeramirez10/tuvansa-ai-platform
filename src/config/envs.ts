@@ -18,6 +18,18 @@ export interface ApiConfig extends BaseConfig {
   structuredAiPromptVersion: string;
   compatibilityWaitTimeoutMs: number;
   compatibilityPollIntervalMs: number;
+  pineconeApiKey?: string;
+  pineconeCatalogIndex: string;
+  pineconeCatalogVariantsNamespace: string;
+  pineconeLocalProductsNamespace: string;
+  voyageApiKey?: string;
+  voyageModel: string;
+  voyageDimension: number;
+  voyageMinRequestIntervalMs: number;
+  erpProductsBaseUrl?: string;
+  erpProductsTimeoutMs: number;
+  erpProductsApiKey?: string;
+  localProductsInternalApiKey?: string;
 }
 
 export interface WorkerConfig extends BaseConfig {
@@ -52,6 +64,26 @@ export function loadApiConfig(): ApiConfig {
     structuredAiPromptVersion: get("STRUCTURED_AI_PROMPT_VERSION").default("structured-ai-v1").asString(),
     compatibilityWaitTimeoutMs: get("COMPATIBILITY_WAIT_TIMEOUT_MS").default("60000").asIntPositive(),
     compatibilityPollIntervalMs: get("COMPATIBILITY_POLL_INTERVAL_MS").default("200").asIntPositive(),
+    pineconeApiKey: get("PINECONE_API_KEY").asString() || undefined,
+    pineconeCatalogIndex: get("PINECONE_CATALOG_V2_INDEX").default("proscai-catalog-v2").asString(),
+    pineconeCatalogVariantsNamespace: get("PINECONE_CATALOG_VARIANTS_NAMESPACE")
+      .default("catalog-variants-v1")
+      .asString(),
+    pineconeLocalProductsNamespace: get("PINECONE_LOCAL_PRODUCTS_NAMESPACE")
+      .default("local-products-v1")
+      .asString(),
+    voyageApiKey: get("VOYAGEAI_API_KEY").asString() || undefined,
+    voyageModel: get("VOYAGE_CATALOG_V2_MODEL").default("voyage-4-large").asString(),
+    voyageDimension: get("VOYAGE_CATALOG_V2_DIMENSION").default("1024").asIntPositive(),
+    voyageMinRequestIntervalMs: get("VOYAGE_CATALOG_V2_MIN_REQUEST_INTERVAL_MS")
+      .default("100")
+      .asIntPositive(),
+    erpProductsBaseUrl: get("ERP_PRODUCTS_BASE_URL")
+      .default("http://localhost:3500/api/erp/products")
+      .asString() || undefined,
+    erpProductsTimeoutMs: get("ERP_PRODUCTS_TIMEOUT_MS").default("5000").asIntPositive(),
+    erpProductsApiKey: get("ERP_PRODUCTS_API_KEY").asString() || undefined,
+    localProductsInternalApiKey: get("LOCAL_PRODUCTS_INTERNAL_API_KEY").asString() || undefined,
   };
 }
 

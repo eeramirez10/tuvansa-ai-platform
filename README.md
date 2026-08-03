@@ -19,6 +19,9 @@ The existing AI backends remain active while capabilities are migrated increment
 - Missing product normalization for local temporary products.
 - Technical data suggestions for individual items and batches.
 - AI-assisted internal code generation for quote catalogs.
+- Pure semantic product search with Voyage embeddings, Pinecone and ERP availability.
+- EAN deduplication with explicit `SEMANTIC_ONLY` ranking.
+- Local temporary product vector search, sync, update and delete lifecycle.
 - Async jobs for every migrated capability with synchronous compatibility adapters for the current frontend.
 - Compatibility response fields used by the current frontend (`file_name`, `file_type`, `items_count`).
 - Explicit rejection for scanned PDFs that require external OCR.
@@ -58,6 +61,7 @@ POST /api/v1/assistance/technical-data/suggest-batch
 POST /api/v1/assistance/quote-catalogs/suggest-code
 GET  /api/v1/jobs/:id
 GET  /api/v1/jobs/:id/result
+POST /api/v1/catalog/search/semantic
 ```
 
 Temporary compatibility aliases:
@@ -73,10 +77,18 @@ POST /api/procurement/technical-data/suggest-batch
 POST /api/quote-catalogs/suggest-code
 GET  /api/extract/jobs/:id/status
 GET  /api/extract/jobs/:id/result
+POST /api/vector-catalog/search/semantic
+POST /api/ai/products/similar-v2/semantic
+POST /api/local-products-semantic/search
+POST /api/local-products-semantic/sync
+PUT  /api/local-products-semantic/:productId
+DELETE /api/local-products-semantic/:productId
 ```
 
 ## Next migration slices
 
-1. Semantic catalog search and local product vector synchronization.
-2. Catalog indexing, ranking and evaluation from `tuvansa-backend-gpt`.
+1. Catalog indexing, hybrid ranking and evaluation from `tuvansa-backend-gpt`.
+2. Point the current consumers to the compatibility routes and validate in parallel.
 3. Retire old AI routes after frontend cutover validation.
+
+See `docs/semantic-cutover.md` for the progressive migration settings.
