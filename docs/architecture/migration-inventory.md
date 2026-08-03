@@ -11,7 +11,7 @@
 - Quote catalog code suggestion.
 - Similar product facade calls.
 - PostgreSQL extraction jobs.
-- Optional OCR implementation currently disabled.
+- Optional OpenAI OCR implementation migrated and disabled by default.
 
 ## Source: tuvansa-backend-gpt
 

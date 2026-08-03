@@ -1,5 +1,6 @@
 import { AppError } from "../../../../shared/domain/app-error";
 import { DocumentTextExtractorPort } from "../../application/ports/document-text-extractor.port";
+import { PdfOcrTextReaderPort } from "../../application/ports/pdf-ocr-text-reader.port";
 import {
   ExtractedDocumentText,
   SupportedDocumentType,
@@ -14,6 +15,7 @@ export class DocumentTextExtractorAdapter implements DocumentTextExtractorPort {
     private readonly detector: DocumentTypeDetector,
     private readonly xlsxReader: XlsxTextReader,
     private readonly pdfReader: PdfDigitalTextReader,
+    private readonly pdfOcrReader?: PdfOcrTextReaderPort,
   ) {}
 
   public async extract(file: UploadedDocument): Promise<ExtractedDocumentText> {
@@ -28,11 +30,23 @@ export class DocumentTextExtractorAdapter implements DocumentTextExtractorPort {
       textContent = pdf.textContent;
       extractionHints = pdf.extractionHints;
       if (this.isMissingSearchableText(textContent)) {
-        throw new AppError(
-          "Este PDF no contiene texto legible. Aplica OCR con Acrobat Pro y vuelve a subirlo.",
-          422,
-          "PDF_REQUIRES_OCR",
-        );
+        if (!this.pdfOcrReader) {
+          throw new AppError(
+            "Este PDF no contiene texto legible. Aplica OCR con Acrobat Pro y vuelve a subirlo.",
+            422,
+            "PDF_REQUIRES_OCR",
+          );
+        }
+
+        textContent = await this.pdfOcrReader.read(file.buffer);
+        extractionHints = null;
+        if (this.isMissingSearchableText(textContent)) {
+          throw new AppError(
+            "OCR no devolvio texto legible. Verifica que el PDF tenga suficiente calidad.",
+            422,
+            "PDF_OCR_TEXT_NOT_FOUND",
+          );
+        }
       }
     }
 

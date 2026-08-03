@@ -27,7 +27,7 @@ The operational capabilities from the two previous AI backends are consolidated 
 - Persisted catalog-search evaluation jobs and metrics.
 - Async jobs for every migrated capability with synchronous compatibility adapters for the current frontend.
 - Compatibility response fields used by the current frontend (`file_name`, `file_type`, `items_count`).
-- Explicit rejection for scanned PDFs that require external OCR.
+- Optional OpenAI OCR fallback controlled by `PDF_OCR_ENABLED`; disabled by default.
 - OpenAI structured output adapter.
 - API and worker graceful shutdown.
 - Liveness and readiness endpoints.
@@ -50,6 +50,8 @@ Run the worker in another terminal:
 ```bash
 pnpm dev:worker
 ```
+
+Scanned PDFs are rejected with `PDF_REQUIRES_OCR` by default. To test automatic OCR, set `PDF_OCR_ENABLED=true`, configure `OPENAI_OCR_MODEL` and restart the worker.
 
 ## Endpoints
 

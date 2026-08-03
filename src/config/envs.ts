@@ -35,6 +35,8 @@ export interface ApiConfig extends BaseConfig {
 export interface WorkerConfig extends BaseConfig {
   openAiApiKey: string;
   openAiModel: string;
+  openAiOcrModel: string;
+  pdfOcrEnabled: boolean;
   promptVersion: string;
   jobAttempts: number;
   workerConcurrency: number;
@@ -106,6 +108,8 @@ export function loadWorkerConfig(): WorkerConfig {
     ...loadBaseConfig(),
     openAiApiKey: get("OPENAI_API_KEY").required().asString(),
     openAiModel: get("OPENAI_MODEL").default("gpt-5-nano").asString(),
+    openAiOcrModel: get("OPENAI_OCR_MODEL").default("gpt-5.4").asString(),
+    pdfOcrEnabled: get("PDF_OCR_ENABLED").default("false").asBool(),
     promptVersion: get("QUOTE_EXTRACTION_PROMPT_VERSION").default("quote-items-v1").asString(),
     jobAttempts: get("JOB_ATTEMPTS").default("3").asIntPositive(),
     workerConcurrency: get("WORKER_CONCURRENCY").default("2").asIntPositive(),

@@ -6,6 +6,14 @@ import { CreateDocumentExtractionJobUseCase } from "../src/modules/document-extr
 import { DocumentStoragePort } from "../src/modules/document-extraction/application/ports/document-storage.port";
 import { StoredDocument, UploadedDocument } from "../src/modules/document-extraction/domain/document-file";
 import { XlsxTextReader } from "../src/modules/document-extraction/infrastructure/files/xlsx-text-reader";
+import { DocumentTextExtractorAdapter } from "../src/modules/document-extraction/infrastructure/files/document-text-extractor.adapter";
+import { DocumentTypeDetector } from "../src/modules/document-extraction/infrastructure/files/document-type-detector";
+import { PdfDigitalReconciliationService } from "../src/modules/document-extraction/infrastructure/files/pdf-digital-reconciliation.service";
+import {
+  PdfDigitalTextReader,
+  PdfDigitalTextReadResult,
+} from "../src/modules/document-extraction/infrastructure/files/pdf-digital-text-reader";
+import { PdfOcrTextReaderPort } from "../src/modules/document-extraction/application/ports/pdf-ocr-text-reader.port";
 import { AiJob, AiJobStatus, AiJobType } from "../src/modules/job-management/domain/ai-job.entity";
 import { AppError } from "../src/shared/domain/app-error";
 import {
@@ -71,6 +79,25 @@ class FakeRepository implements AiJobRepository {
   public async recordRun(_input: AiRunInput): Promise<void> {}
 }
 
+class EmptyPdfTextReader extends PdfDigitalTextReader {
+  constructor() {
+    super(new PdfDigitalReconciliationService());
+  }
+
+  public override async read(): Promise<PdfDigitalTextReadResult> {
+    return { textContent: "", extractionHints: "unused hints" };
+  }
+}
+
+class FakePdfOcrTextReader extends PdfOcrTextReaderPort {
+  public calls = 0;
+
+  public async read(): Promise<string> {
+    this.calls += 1;
+    return "2 PZA VALVULA COMPUERTA ACERO AL CARBON DE 2 PULGADAS";
+  }
+}
+
 test("reads quote rows from XLSX in source order", () => {
   const workbook = XLSX.utils.book_new();
   const sheet = XLSX.utils.aoa_to_sheet([
@@ -132,4 +159,41 @@ test("rejects non-Excel files for quoted Excel jobs before storing them", async 
     (error: unknown) => error instanceof AppError && error.code === "QUOTED_EXCEL_FILE_REQUIRED",
   );
   assert.deepEqual(storage.removed, []);
+});
+
+test("rejects scanned PDFs when OCR is disabled", async () => {
+  const extractor = new DocumentTextExtractorAdapter(
+    new DocumentTypeDetector(),
+    new XlsxTextReader(),
+    new EmptyPdfTextReader(),
+  );
+
+  await assert.rejects(
+    () => extractor.extract({
+      buffer: Buffer.from("%PDF scanned"),
+      originalName: "scanned.pdf",
+      mimeType: "application/pdf",
+    }),
+    (error: unknown) => error instanceof AppError && error.code === "PDF_REQUIRES_OCR",
+  );
+});
+
+test("uses OCR text for scanned PDFs when OCR is enabled", async () => {
+  const ocr = new FakePdfOcrTextReader();
+  const extractor = new DocumentTextExtractorAdapter(
+    new DocumentTypeDetector(),
+    new XlsxTextReader(),
+    new EmptyPdfTextReader(),
+    ocr,
+  );
+
+  const result = await extractor.extract({
+    buffer: Buffer.from("%PDF scanned"),
+    originalName: "scanned.pdf",
+    mimeType: "application/pdf",
+  });
+
+  assert.equal(ocr.calls, 1);
+  assert.match(result.textContent, /VALVULA COMPUERTA/);
+  assert.equal(result.extractionHints, null);
 });

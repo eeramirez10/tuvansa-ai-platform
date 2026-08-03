@@ -11,6 +11,7 @@ import { XlsxTextReader } from "../modules/document-extraction/infrastructure/fi
 import { OpenAiQuoteTextExtractorAdapter } from "../modules/document-extraction/infrastructure/openai-quote-text-extractor.adapter";
 import { OpenAiQuotedExcelExtractorAdapter } from "../modules/document-extraction/infrastructure/openai-quoted-excel-extractor.adapter";
 import { OpenAiSupplierQuoteExtractorAdapter } from "../modules/document-extraction/infrastructure/openai-supplier-quote-extractor.adapter";
+import { OpenAiPdfOcrTextReaderAdapter } from "../modules/document-extraction/infrastructure/openai-pdf-ocr-text-reader.adapter";
 import { AiJobType } from "../modules/job-management/domain/ai-job.entity";
 import { PrismaAiJobRepository } from "../modules/job-management/infrastructure/prisma-ai-job.repository";
 import { EnqueueJobInput } from "../shared/application/ports/job-queue.port";
@@ -45,6 +46,9 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
   const quoteExtractor = new OpenAiQuoteTextExtractorAdapter(config.openAiApiKey, config.openAiModel);
   const quotedExcelExtractor = new OpenAiQuotedExcelExtractorAdapter(config.openAiApiKey, config.openAiModel);
   const supplierQuoteExtractor = new OpenAiSupplierQuoteExtractorAdapter(config.openAiApiKey, config.openAiModel);
+  const pdfOcrReader = config.pdfOcrEnabled
+    ? new OpenAiPdfOcrTextReaderAdapter(config.openAiApiKey, config.openAiOcrModel)
+    : undefined;
   const technicalDataProcessor = new ProcessStructuredAiJobUseCase(
     repository,
     AiJobType.TECHNICAL_DATA_SUGGESTION,
@@ -68,6 +72,7 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
     new DocumentTypeDetector(),
     new XlsxTextReader(),
     new PdfDigitalTextReader(new PdfDigitalReconciliationService()),
+    pdfOcrReader,
   );
   const processTextJob = new ProcessTextExtractionJobUseCase(repository, quoteExtractor);
   const processDocumentJob = new ProcessDocumentExtractionJobUseCase(
