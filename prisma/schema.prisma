@@ -23,6 +23,7 @@ enum AiJobType {
   supplier_quote_extraction
   semantic_search
   vector_catalog_sync
+  catalog_search_evaluation
   technical_data_suggestion
   missing_product_normalization
   quote_catalog_code_suggestion

@@ -76,6 +76,7 @@ function unavailablePublicRoutes(): Router {
   router.post("/vector-catalog/search/semantic", unavailable);
   router.post("/ai/products/similar-v2", unavailable);
   router.post("/ai/products/similar-v2/semantic", unavailable);
+  router.post("/ai/products/similar", unavailable);
   return router;
 }
 

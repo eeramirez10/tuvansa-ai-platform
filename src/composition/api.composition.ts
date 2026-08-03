@@ -21,6 +21,9 @@ import { composeSemanticCatalog } from "./semantic-catalog.composition";
 import { CreateVectorCatalogSyncJobUseCase } from "../modules/semantic-catalog/application/use-cases/create-vector-catalog-sync-job.use-case";
 import { CatalogMaintenanceController } from "../modules/semantic-catalog/presentation/catalog-maintenance.controller";
 import { CatalogMaintenanceRoutes } from "../modules/semantic-catalog/presentation/catalog-maintenance.routes";
+import { CreateCatalogSearchEvaluationJobUseCase } from "../modules/semantic-catalog/application/use-cases/create-catalog-search-evaluation-job.use-case";
+import { CatalogSearchEvaluationController } from "../modules/semantic-catalog/presentation/catalog-search-evaluation.controller";
+import { CatalogSearchEvaluationRoutes } from "../modules/semantic-catalog/presentation/catalog-search-evaluation.routes";
 
 export interface ApiRuntime {
   app: Express;
@@ -57,7 +60,12 @@ export function composeApi(config: ApiConfig): ApiRuntime {
     config.compatibilityWaitTimeoutMs,
     config.compatibilityPollIntervalMs,
   );
-  const controller = new ExtractionJobsController(createTextJob, createDocumentJob, getJob);
+  const controller = new ExtractionJobsController(
+    createTextJob,
+    createDocumentJob,
+    getJob,
+    waitForStructuredResult,
+  );
   const routes = new ExtractionJobsRoutes(controller, config.maxUploadBytes);
   const assistanceController = new AiAssistanceController(createStructuredJob, waitForStructuredResult);
   const assistanceRoutes = new AiAssistanceRoutes(assistanceController);
@@ -70,6 +78,11 @@ export function composeApi(config: ApiConfig): ApiRuntime {
         "catalog-variant-v1",
       ),
       semanticCatalog.enabled,
+    ),
+  );
+  const catalogEvaluationRoutes = new CatalogSearchEvaluationRoutes(
+    new CatalogSearchEvaluationController(
+      new CreateCatalogSearchEvaluationJobUseCase(repository, queue, "catalog-evaluation-v1"),
     ),
   );
 
@@ -85,6 +98,9 @@ export function composeApi(config: ApiConfig): ApiRuntime {
       process: "api",
       semanticCatalog: semanticCatalog.enabled ? "enabled" : "disabled",
     });
+  });
+  app.get("/health", (_req, res) => {
+    res.json({ ok: true, service: "tuvansa-ai-platform" });
   });
   app.get("/health/ready", async (_req, res) => {
     try {
@@ -104,6 +120,7 @@ export function composeApi(config: ApiConfig): ApiRuntime {
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), routes.build());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), assistanceRoutes.build());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), catalogMaintenanceRoutes.build());
+  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), catalogEvaluationRoutes.build());
   app.use(errorHandler);
 
   return {

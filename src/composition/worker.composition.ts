@@ -29,6 +29,9 @@ import { MysqlProscaiCatalogVariantDatasource } from "../modules/semantic-catalo
 import { PineconeVectorIndexAdapter } from "../modules/semantic-catalog/infrastructure/pinecone-vector-index.adapter";
 import { ProscaiCatalogNormalizerService } from "../modules/semantic-catalog/infrastructure/proscai-catalog-normalizer.service";
 import { VoyageTextEmbeddingAdapter } from "../modules/semantic-catalog/infrastructure/voyage-text-embedding.adapter";
+import { EvaluateProscaiCatalogSearchUseCase } from "../modules/semantic-catalog/application/use-cases/evaluate-proscai-catalog-search.use-case";
+import { ProcessCatalogSearchEvaluationJobUseCase } from "../modules/semantic-catalog/application/use-cases/process-catalog-search-evaluation-job.use-case";
+import { SearchSemanticCatalogUseCase } from "../modules/semantic-catalog/application/use-cases/search-semantic-catalog.use-case";
 
 export interface WorkerRuntime {
   start(): void;
@@ -111,6 +114,13 @@ export function composeWorker(config: WorkerConfig): WorkerRuntime {
               await catalogSync.processor.execute(job.data.jobId);
               return;
             }
+            if (job.data.type === AiJobType.CATALOG_SEARCH_EVALUATION) {
+              if (!catalogSync.evaluationProcessor) {
+                throw new UnrecoverableError("Catalog search evaluation is not configured.");
+              }
+              await catalogSync.evaluationProcessor.execute(job.data.jobId);
+              return;
+            }
             throw new UnrecoverableError(`Unsupported job type: ${job.data.type}`);
           } catch (error) {
             const message = error instanceof Error ? error.message : "Unknown worker error.";
@@ -176,6 +186,7 @@ function errorCodeFor(type: AiJobType): string {
   if (type === AiJobType.QUOTE_TEXT_EXTRACTION) return "QUOTE_TEXT_EXTRACTION_FAILED";
   if (type === AiJobType.QUOTE_DOCUMENT_EXTRACTION) return "QUOTE_DOCUMENT_EXTRACTION_FAILED";
   if (type === AiJobType.VECTOR_CATALOG_SYNC) return "VECTOR_CATALOG_SYNC_FAILED";
+  if (type === AiJobType.CATALOG_SEARCH_EVALUATION) return "CATALOG_SEARCH_EVALUATION_FAILED";
   return "AI_JOB_PROCESSING_FAILED";
 }
 
@@ -184,6 +195,7 @@ function composeCatalogSyncProcessor(
   repository: PrismaAiJobRepository,
 ): {
   processor?: ProcessVectorCatalogSyncJobUseCase;
+  evaluationProcessor?: ProcessCatalogSearchEvaluationJobUseCase;
   datasource?: MysqlProscaiCatalogVariantDatasource;
 } {
   const required = [
@@ -227,5 +239,12 @@ function composeCatalogSyncProcessor(
   return {
     datasource,
     processor: new ProcessVectorCatalogSyncJobUseCase(repository, sync, config.voyageModel),
+    evaluationProcessor: new ProcessCatalogSearchEvaluationJobUseCase(
+      repository,
+      new EvaluateProscaiCatalogSearchUseCase(
+        new SearchSemanticCatalogUseCase(embeddings, vectorIndex),
+      ),
+      config.voyageModel,
+    ),
   };
 }

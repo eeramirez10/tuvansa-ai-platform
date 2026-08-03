@@ -16,6 +16,7 @@ export class SemanticCatalogRoutes {
     router.post("/vector-catalog/search/semantic", this.catalogController.vectorSearch);
     router.post("/ai/products/similar-v2", this.catalogController.hybridQuoteSearch);
     router.post("/ai/products/similar-v2/semantic", this.catalogController.quoteSearch);
+    router.post("/ai/products/similar", this.catalogController.hybridQuoteSearch);
     return router;
   }
 

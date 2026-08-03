@@ -14,6 +14,7 @@ import { BuildProscaiCatalogVariantsUseCase } from "../src/modules/semantic-cata
 import { LocalProductSemanticUseCase } from "../src/modules/semantic-catalog/application/use-cases/local-product-semantic.use-case";
 import { SearchSemanticCatalogUseCase } from "../src/modules/semantic-catalog/application/use-cases/search-semantic-catalog.use-case";
 import { SyncProscaiCatalogVariantsUseCase } from "../src/modules/semantic-catalog/application/use-cases/sync-proscai-catalog-variants.use-case";
+import { EvaluateProscaiCatalogSearchUseCase } from "../src/modules/semantic-catalog/application/use-cases/evaluate-proscai-catalog-search.use-case";
 import { ProscaiCatalogVariantDatasource } from "../src/modules/semantic-catalog/domain/datasources/proscai-catalog-variant.datasource";
 import { ProscaiCatalogVariantSourceRecord } from "../src/modules/semantic-catalog/domain/entities/proscai-catalog-variant.entity";
 import { ProductAvailability, VectorMatch, VectorMetadata } from "../src/modules/semantic-catalog/domain/semantic-catalog.types";
@@ -352,4 +353,35 @@ test("full catalog synchronization keeps current vectors and deletes only stale 
   assert.equal(result.deleted, 1);
   assert.equal(result.fullReconciliation, true);
   assert.deepEqual(index.deleted, [["proscai-stale"]]);
+});
+
+test("catalog evaluation records parser, ranking and top-result accuracy", async () => {
+  const embeddings = new FakeEmbeddings();
+  const index = new FakeVectorIndex();
+  index.matches = [{
+    id: "pipe-carbon-4-sch10",
+    score: 0.93,
+    metadata: {
+      ean: "TCC410",
+      product: "TUBO",
+      material: "ACERO AL CARBON",
+      diameter: "4",
+      ced: "10",
+      costura: "CON COSTURA",
+      unit: "METRO",
+      normalizedDescription: "TUBO ACERO AL CARBON CON COSTURA 4 CEDULA 10",
+    },
+  }];
+  const evaluation = new EvaluateProscaiCatalogSearchUseCase(
+    new SearchSemanticCatalogUseCase(embeddings, index),
+  );
+
+  const result = await evaluation.execute({ caseIds: ["pipe-carbon-steel-4-sch10"] });
+
+  assert.equal(result.totalCases, 1);
+  assert.equal(result.completedCases, 1);
+  assert.equal(result.summary.top1Hits, 1);
+  assert.equal(result.summary.parserHits, 1);
+  assert.equal(result.results[0]?.rankingStrategy, "PIPE");
+  assert.equal(result.results[0]?.passed, true);
 });

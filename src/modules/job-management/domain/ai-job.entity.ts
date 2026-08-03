@@ -14,6 +14,7 @@ export enum AiJobType {
   SUPPLIER_QUOTE_EXTRACTION = "supplier_quote_extraction",
   SEMANTIC_SEARCH = "semantic_search",
   VECTOR_CATALOG_SYNC = "vector_catalog_sync",
+  CATALOG_SEARCH_EVALUATION = "catalog_search_evaluation",
   TECHNICAL_DATA_SUGGESTION = "technical_data_suggestion",
   MISSING_PRODUCT_NORMALIZATION = "missing_product_normalization",
   QUOTE_CATALOG_CODE_SUGGESTION = "quote_catalog_code_suggestion",

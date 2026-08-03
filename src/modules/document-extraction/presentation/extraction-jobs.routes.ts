@@ -24,6 +24,7 @@ export class ExtractionJobsRoutes {
 
     // Compatibility aliases used by the current frontend.
     router.post("/extract/jobs/text", this.controller.createFromText);
+    router.post("/extract", upload.single("file"), this.controller.extractDocument);
     router.post("/extract/jobs", upload.single("file"), this.controller.createFromDocument);
     router.post("/extract/jobs/quoted-excel", upload.single("file"), this.controller.createFromQuotedExcel);
     router.post("/extract/jobs/supplier-quote", upload.single("file"), this.controller.createFromSupplierQuote);
