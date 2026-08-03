@@ -13,6 +13,7 @@ test("retries item extraction when a supplier table returns no items", async () 
         contactName: null,
         email: null,
         phone: null,
+        contacts: [],
         confidence: 0.9,
         evidence: "PROVEEDOR INDUSTRIAL",
       },
@@ -92,4 +93,38 @@ test("retries item extraction when a supplier table returns no items", async () 
   assert.equal(extraction.result.items[0]?.quantity, 1331.2);
   assert.equal(extraction.usage.inputTokens, 200);
   assert.equal(extraction.usage.outputTokens, 50);
+});
+
+test("normalizes and deduplicates multiple supplier contacts", async () => {
+  const response = {
+    supplier: {
+      name: "PROVEEDOR INDUSTRIAL",
+      taxId: null,
+      state: null,
+      contactName: "Ventas",
+      email: "ventas@example.com",
+      phone: "81 1234 5678",
+      contacts: [
+        { channel: "EMAIL", value: "ventas@example.com", phoneKind: null, isWhatsApp: false, contactName: "Ventas", label: "Ventas", confidence: 0.95, evidence: "ventas@example.com" },
+        { channel: "EMAIL", value: "VENTAS@example.com", phoneKind: null, isWhatsApp: false, contactName: null, label: null, confidence: 0.9, evidence: null },
+        { channel: "PHONE", value: "81 1234 5678", phoneKind: "LANDLINE", isWhatsApp: false, contactName: "Ventas", label: "Tel", confidence: 0.9, evidence: "Tel. 81 1234 5678" },
+        { channel: "PHONE", value: "81 9999 0000", phoneKind: "MOBILE", isWhatsApp: true, contactName: "Ventas", label: "WhatsApp", confidence: 0.98, evidence: "WhatsApp 81 9999 0000" },
+      ],
+      confidence: 0.95,
+      evidence: "PROVEEDOR INDUSTRIAL",
+    },
+    header: { reference: null, quoteDate: null, validUntil: null, currency: "MXN", exchangeRate: null, paymentTerms: null, deliveryTerms: null },
+    totals: { subtotal: null, discount: null, freight: null, otherCharges: null, taxIncluded: null, taxRate: null, tax: null, total: null },
+    items: [],
+    warnings: [],
+  };
+  const client = { chat: { completions: { create: async () => ({ choices: [{ message: { content: JSON.stringify(response) } }], usage: {} }) } } } as unknown as OpenAI;
+  const extractor = new OpenAiSupplierQuoteExtractorAdapter("unused", "test-model", client);
+
+  const extraction = await extractor.extract("PROVEEDOR INDUSTRIAL", "supplier.pdf");
+
+  assert.equal(extraction.result.supplier.contacts.length, 3);
+  assert.equal(extraction.result.supplier.email, "ventas@example.com");
+  assert.equal(extraction.result.supplier.phone, "81 1234 5678");
+  assert.equal(extraction.result.supplier.contacts[2]?.isWhatsApp, true);
 });

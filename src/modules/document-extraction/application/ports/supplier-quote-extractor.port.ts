@@ -21,6 +21,17 @@ export interface SupplierQuoteExtractedItem {
   evidence: string | null;
 }
 
+export interface SupplierQuoteExtractedContact {
+  channel: "EMAIL" | "PHONE";
+  value: string;
+  phoneKind: "LANDLINE" | "MOBILE" | "UNKNOWN" | null;
+  isWhatsApp: boolean;
+  contactName: string | null;
+  label: string | null;
+  confidence: number;
+  evidence: string | null;
+}
+
 export interface SupplierQuoteResult {
   fileName: string;
   supplier: {
@@ -30,6 +41,7 @@ export interface SupplierQuoteResult {
     contactName: string | null;
     email: string | null;
     phone: string | null;
+    contacts: SupplierQuoteExtractedContact[];
     confidence: number;
     evidence: string | null;
   };

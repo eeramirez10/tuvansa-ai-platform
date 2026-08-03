@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { ChatCompletionCreateParams } from "openai/resources/chat/completions";
 import {
   SupplierQuoteExtractedItem,
+  SupplierQuoteExtractedContact,
   SupplierQuoteExtractorPort,
   SupplierQuoteResult,
 } from "../application/ports/supplier-quote-extractor.port";
@@ -114,6 +115,11 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
     const items = (Array.isArray(root.items) ? root.items : [])
       .map((item) => this.normalizeItem(item, warnings))
       .filter((item): item is SupplierQuoteExtractedItem => Boolean(item));
+    const contacts = this.normalizeContacts(supplierRaw);
+    const primaryEmail = contacts.find((contact) => contact.channel === "EMAIL")?.value
+      ?? this.text(supplierRaw.email);
+    const primaryPhone = contacts.find((contact) => contact.channel === "PHONE")?.value
+      ?? this.text(supplierRaw.phone);
 
     const subtotal = this.number(totalsRaw.subtotal);
     const discount = this.number(totalsRaw.discount);
@@ -142,8 +148,9 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
         taxId: this.text(supplierRaw.taxId),
         state: this.text(supplierRaw.state),
         contactName: this.text(supplierRaw.contactName),
-        email: this.text(supplierRaw.email),
-        phone: this.text(supplierRaw.phone),
+        email: primaryEmail,
+        phone: primaryPhone,
+        contacts,
         confidence: this.confidence(supplierRaw.confidence),
         evidence: this.text(supplierRaw.evidence),
       },
@@ -170,6 +177,43 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
       warnings: uniqueWarnings,
       requiresReview: uniqueWarnings.length > 0 || items.some((item) => item.requiresReview),
     };
+  }
+
+  private normalizeContacts(supplierRaw: JsonRecord): SupplierQuoteExtractedContact[] {
+    const rawContacts = Array.isArray(supplierRaw.contacts) ? supplierRaw.contacts : [];
+    const legacyContacts: unknown[] = [];
+    if (rawContacts.length === 0 && this.text(supplierRaw.email)) {
+      legacyContacts.push({ channel: "EMAIL", value: supplierRaw.email });
+    }
+    if (rawContacts.length === 0 && this.text(supplierRaw.phone)) {
+      legacyContacts.push({ channel: "PHONE", value: supplierRaw.phone });
+    }
+    const seen = new Set<string>();
+    return [...rawContacts, ...legacyContacts].flatMap((value) => {
+      const raw = this.record(value);
+      const channel = raw.channel === "EMAIL" || raw.channel === "PHONE" ? raw.channel : null;
+      const contactValue = this.text(raw.value);
+      if (!channel || !contactValue) return [];
+      const normalized = channel === "EMAIL"
+        ? contactValue.toLowerCase()
+        : contactValue.replace(/\D/g, "");
+      const key = `${channel}:${normalized}`;
+      if (!normalized || seen.has(key)) return [];
+      seen.add(key);
+      const phoneKind = channel === "PHONE" && ["LANDLINE", "MOBILE", "UNKNOWN"].includes(String(raw.phoneKind))
+        ? raw.phoneKind as SupplierQuoteExtractedContact["phoneKind"]
+        : channel === "PHONE" ? "UNKNOWN" : null;
+      return [{
+        channel,
+        value: contactValue,
+        phoneKind,
+        isWhatsApp: channel === "PHONE" && raw.isWhatsApp === true,
+        contactName: this.text(raw.contactName),
+        label: this.text(raw.label),
+        confidence: this.confidence(raw.confidence ?? 0.5),
+        evidence: this.text(raw.evidence),
+      }];
+    });
   }
 
   private normalizeItem(value: unknown, warnings: string[]): SupplierQuoteExtractedItem | null {
@@ -261,7 +305,7 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
             supplier: {
               type: "object",
               additionalProperties: false,
-              required: ["name", "taxId", "state", "contactName", "email", "phone", "confidence", "evidence"],
+              required: ["name", "taxId", "state", "contactName", "email", "phone", "contacts", "confidence", "evidence"],
               properties: {
                 name: { type: ["string", "null"] },
                 taxId: { type: ["string", "null"] },
@@ -269,6 +313,24 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
                 contactName: { type: ["string", "null"] },
                 email: { type: ["string", "null"] },
                 phone: { type: ["string", "null"] },
+                contacts: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["channel", "value", "phoneKind", "isWhatsApp", "contactName", "label", "confidence", "evidence"],
+                    properties: {
+                      channel: { type: "string", enum: ["EMAIL", "PHONE"] },
+                      value: { type: "string" },
+                      phoneKind: { type: ["string", "null"], enum: ["LANDLINE", "MOBILE", "UNKNOWN", null] },
+                      isWhatsApp: { type: "boolean" },
+                      contactName: { type: ["string", "null"] },
+                      label: { type: ["string", "null"] },
+                      confidence: { type: "number" },
+                      evidence: { type: ["string", "null"] },
+                    },
+                  },
+                },
                 confidence: { type: "number" },
                 evidence: { type: ["string", "null"] },
               },
@@ -377,6 +439,9 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
       "Eres un extractor de cotizaciones de proveedores industriales.",
       "No inventes datos. Usa null cuando el documento no muestre un valor.",
       "En supplier extrae exclusivamente la empresa que emite la cotizacion, nunca TUVANSA como cliente.",
+      "En supplier.contacts devuelve por separado cada correo y cada telefono visible; nunca juntes varios valores en una cadena.",
+      "Para telefonos usa phoneKind LANDLINE, MOBILE o UNKNOWN. Marca isWhatsApp=true solo si el documento dice WhatsApp/WA o lo identifica explicitamente; un celular por si solo no prueba que tenga WhatsApp.",
+      "Deduplica contactos repetidos y conserva nombre de contacto o etiqueta cuando el documento los asocie.",
       "Extrae todas las partidas reales de material y conserva la descripcion comercial del proveedor.",
       "Nunca devuelvas items vacio si existe al menos una fila con cantidad, descripcion y precio.",
       "Una fila de material sigue siendo partida aunque sea la unica del documento.",

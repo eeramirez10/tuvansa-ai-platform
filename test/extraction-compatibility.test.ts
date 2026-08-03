@@ -139,7 +139,7 @@ test("processes supplier quote and preserves commercial validation output", asyn
       usage,
       result: {
         fileName,
-        supplier: { name: "Proveedor SA", taxId: null, state: null, contactName: null, email: null, phone: null, confidence: 0.9, evidence: null },
+        supplier: { name: "Proveedor SA", taxId: null, state: null, contactName: null, email: null, phone: null, contacts: [], confidence: 0.9, evidence: null },
         header: { reference: "COT-1", quoteDate: null, validUntil: null, currency: "USD", exchangeRate: null, paymentTerms: null, deliveryTerms: null },
         totals: { subtotal: 100, discount: null, freight: null, otherCharges: null, taxIncluded: false, taxRate: 16, tax: 16, total: 116 },
         items: [],
