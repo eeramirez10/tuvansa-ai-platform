@@ -28,6 +28,7 @@ export interface SupplierQuoteExtractedContact {
   extension: string | null;
   isWhatsApp: boolean;
   contactName: string | null;
+  contactPosition: string | null;
   label: string | null;
   confidence: number;
   evidence: string | null;
