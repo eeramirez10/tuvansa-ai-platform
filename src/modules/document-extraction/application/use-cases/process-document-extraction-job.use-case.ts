@@ -111,6 +111,7 @@ export class ProcessDocumentExtractionJobUseCase {
         file_type: fileType,
         items_count: extraction.items.length,
         items: extraction.items.map((item) => item.toPrimitives()),
+        detected_customer: extraction.customer,
       },
       usage: extraction.usage,
     };

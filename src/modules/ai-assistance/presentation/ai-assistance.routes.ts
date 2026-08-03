@@ -11,6 +11,7 @@ export class AiAssistanceRoutes {
     router.post("/v1/assistance/technical-data/suggest", this.controller.createTechnicalDataJob);
     router.post("/v1/assistance/technical-data/suggest-batch", this.controller.createTechnicalDataBatchJob);
     router.post("/v1/assistance/quote-catalogs/suggest-code", this.controller.createCatalogCodeJob);
+    router.post("/v1/assistance/parties/extract", this.controller.createPartyDataJob);
 
     return router;
   }
@@ -23,6 +24,7 @@ export class AiAssistanceRoutes {
     router.post("/procurement/technical-data/suggest", this.controller.suggestTechnicalData);
     router.post("/procurement/technical-data/suggest-batch", this.controller.suggestTechnicalDataBatch);
     router.post("/quote-catalogs/suggest-code", this.controller.suggestCatalogCode);
+    router.post("/parties/extract", this.controller.extractPartyData);
 
     return router;
   }

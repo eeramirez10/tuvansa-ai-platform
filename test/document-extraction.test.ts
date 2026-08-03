@@ -126,6 +126,66 @@ test("reads quote rows from XLSX in source order", () => {
   assert.ok(text.indexOf("VALVULA") < text.indexOf("TUBO"));
 });
 
+test("builds structured PDF table hints with technical columns", () => {
+  const reconciler = new PdfDigitalReconciliationService();
+  const header = [
+    { text: "IDENT", x: 75 },
+    { text: "DESCRIPCION", x: 105 },
+    { text: "DIAM1 (Pulg)", x: 358 },
+    { text: "DIAM2 (Pulg)", x: 400 },
+    { text: "SCH1", x: 443 },
+    { text: "Unidad", x: 473 },
+    { text: "Cantidad", x: 503 },
+  ];
+  const row = [
+    { text: "2061397 Eccentric Reducer A403-WP316/316L-S -- BW -", x: 79 },
+    { text: "6", x: 358 },
+    { text: "4", x: 400 },
+    { text: "S-10S", x: 443 },
+    { text: "Pza", x: 473 },
+    { text: "4", x: 524 },
+  ];
+
+  const result = reconciler.reconcilePage(
+    "IDENT DESCRIPCION DIAM1 (Pulg) DIAM2 (Pulg) SCH1 Unidad Cantidad",
+    [header, row],
+  );
+
+  assert.match(result, /STRUCTURED_TABLE_ROWS/);
+  assert.match(result, /SOURCE_ID=2061397/);
+  assert.match(result, /DESCRIPTION=Eccentric Reducer A403-WP316\/316L-S -- BW -/);
+  assert.match(result, /DESCRIPTION_SUFFIX=6" X 4" CED\. 10S/);
+  assert.doesNotMatch(result, /DIAMETER_1=/);
+  assert.match(result, /UNIT=Pza \| QUANTITY=4/);
+});
+
+test("omits empty technical cells and accepts Metro as a structured table unit", () => {
+  const reconciler = new PdfDigitalReconciliationService();
+  const header = [
+    { text: "IDENT", x: 75 },
+    { text: "DESCRIPCION", x: 105 },
+    { text: "DIAM1 (Pulg)", x: 358 },
+    { text: "DIAM2 (Pulg)", x: 400 },
+    { text: "SCH1", x: 443 },
+    { text: "Unidad", x: 473 },
+    { text: "Cantidad", x: 503 },
+  ];
+  const row = [
+    { text: "2062604 Pipe A312-TP316/316L Smls Seamless - - - - BE", x: 79 },
+    { text: "4", x: 358 },
+    { text: "0", x: 400 },
+    { text: "S-10S", x: 443 },
+    { text: "Metro", x: 473 },
+    { text: "188", x: 521 },
+  ];
+
+  const result = reconciler.reconcilePage("table", [header, row]);
+
+  assert.match(result, /DESCRIPTION_SUFFIX=4" CED\. 10S/);
+  assert.doesNotMatch(result, / X 0"/);
+  assert.match(result, /UNIT=Metro \| QUANTITY=188/);
+});
+
 test("creates one document job and removes only the duplicate upload", async () => {
   const repository = new FakeRepository();
   const queue = new FakeQueue();

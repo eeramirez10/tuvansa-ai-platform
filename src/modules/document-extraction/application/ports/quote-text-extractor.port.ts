@@ -1,4 +1,5 @@
 import { QuoteItem } from "../../domain/quote-item.entity";
+import { ExtractedPartyData } from "../../../ai-assistance/domain/party-data.types";
 
 export interface AiUsage {
   provider: string;
@@ -10,6 +11,7 @@ export interface AiUsage {
 
 export interface QuoteTextExtraction {
   items: QuoteItem[];
+  customer: ExtractedPartyData | null;
   usage: AiUsage;
 }
 

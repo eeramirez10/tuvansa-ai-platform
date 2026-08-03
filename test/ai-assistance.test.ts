@@ -7,6 +7,7 @@ import { StructuredAiProcessorPort } from "../src/modules/ai-assistance/applicat
 import { CatalogCodeRequestDto } from "../src/modules/ai-assistance/domain/catalog-code-request.dto";
 import { MissingProductsRequestDto } from "../src/modules/ai-assistance/domain/missing-products-request.dto";
 import { TechnicalDataBatchRequestDto } from "../src/modules/ai-assistance/domain/technical-data-request.dto";
+import { PartyDataRequestDto } from "../src/modules/ai-assistance/domain/party-data-request.dto";
 import { AiJobRepository, AiRunInput, CreateAiJobInput, CreateAiJobResult } from "../src/modules/job-management/application/ports/ai-job.repository";
 import { AiJob, AiJobStatus, AiJobType } from "../src/modules/job-management/domain/ai-job.entity";
 import { EnqueueJobInput, JobQueuePort } from "../src/shared/application/ports/job-queue.port";
@@ -119,6 +120,24 @@ test("validates catalog types before consuming AI", () => {
   assert.throws(
     () => CatalogCodeRequestDto.create({ type: "UNKNOWN", label: "Ejemplo" }),
     (error: unknown) => error instanceof AppError && error.code === "INVALID_CATALOG_TYPE",
+  );
+});
+
+test("normalizes party type and preserves pasted contact text", () => {
+  const dto = PartyDataRequestDto.create({
+    partyType: "supplier",
+    text: "  ACME SA DE CV | ventas@acme.mx | WhatsApp +52 81 1234 5678  ",
+  });
+  assert.deepEqual(dto.toJobInput(), {
+    partyType: "SUPPLIER",
+    text: "ACME SA DE CV | ventas@acme.mx | WhatsApp +52 81 1234 5678",
+  });
+});
+
+test("rejects invalid party extraction types before queueing", () => {
+  assert.throws(
+    () => PartyDataRequestDto.create({ partyType: "EMPLOYEE", text: "Persona" }),
+    (error: unknown) => error instanceof AppError && error.code === "INVALID_PARTY_TYPE",
   );
 });
 

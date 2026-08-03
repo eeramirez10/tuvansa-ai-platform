@@ -18,6 +18,7 @@ export enum AiJobType {
   TECHNICAL_DATA_SUGGESTION = "technical_data_suggestion",
   MISSING_PRODUCT_NORMALIZATION = "missing_product_normalization",
   QUOTE_CATALOG_CODE_SUGGESTION = "quote_catalog_code_suggestion",
+  PARTY_DATA_EXTRACTION = "party_data_extraction",
 }
 
 export interface AiJobProps {
