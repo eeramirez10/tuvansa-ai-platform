@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { ChatCompletionCreateParams } from "openai/resources/chat/completions";
 import {
   SupplierQuoteExtractedItem,
   SupplierQuoteExtractorPort,
@@ -10,33 +11,94 @@ type JsonRecord = Record<string, unknown>;
 export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtractorPort {
   private readonly client: OpenAI;
 
-  constructor(apiKey: string, private readonly model: string) {
-    this.client = new OpenAI({ apiKey });
+  constructor(
+    apiKey: string,
+    private readonly model: string,
+    client?: OpenAI,
+  ) {
+    this.client = client ?? new OpenAI({ apiKey });
   }
 
   public async extract(text: string, fileName: string) {
     const startedAt = Date.now();
+    const primary = await this.complete(
+      this.systemPrompt(),
+      `ARCHIVO: ${fileName}\nDOCUMENT_TEXT\n${text}`,
+      this.fullResponseFormat(),
+    );
+    let rawResult = primary.value;
+    let inputTokens = primary.inputTokens;
+    let outputTokens = primary.outputTokens;
+    let normalized = this.normalize(rawResult, fileName);
+
+    if (normalized.items.length === 0 && this.hasLikelyItemTable(text)) {
+      const itemRetry = await this.complete(
+        this.itemRetryPrompt(),
+        `ARCHIVO: ${fileName}\nDOCUMENT_TEXT\n${text}`,
+        this.itemsResponseFormat(),
+      );
+      rawResult = this.mergeRetryItems(rawResult, itemRetry.value);
+      normalized = this.normalize(rawResult, fileName);
+      inputTokens = this.sumUsage(inputTokens, itemRetry.inputTokens);
+      outputTokens = this.sumUsage(outputTokens, itemRetry.outputTokens);
+    }
+
+    return {
+      result: normalized,
+      usage: {
+        provider: "openai",
+        model: this.model,
+        inputTokens,
+        outputTokens,
+        latencyMs: Date.now() - startedAt,
+      },
+    };
+  }
+
+  private async complete(
+    systemPrompt: string,
+    userPrompt: string,
+    responseFormat: NonNullable<ChatCompletionCreateParams["response_format"]>,
+  ): Promise<{ value: unknown; inputTokens?: number; outputTokens?: number }> {
     const completion = await this.client.chat.completions.create({
       model: this.model,
-      response_format: { type: "json_object" },
+      response_format: responseFormat,
       messages: [
-        { role: "system", content: this.systemPrompt() },
-        { role: "user", content: `DOCUMENT_TEXT\n${text}` },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
       ],
     });
     const content = completion.choices[0]?.message?.content;
     if (!content) throw new Error("El modelo no devolvio la cotizacion del proveedor.");
-
     return {
-      result: this.normalize(JSON.parse(content), fileName),
-      usage: {
-        provider: "openai",
-        model: this.model,
-        inputTokens: completion.usage?.prompt_tokens,
-        outputTokens: completion.usage?.completion_tokens,
-        latencyMs: Date.now() - startedAt,
-      },
+      value: JSON.parse(content) as unknown,
+      inputTokens: completion.usage?.prompt_tokens,
+      outputTokens: completion.usage?.completion_tokens,
     };
+  }
+
+  private mergeRetryItems(primaryValue: unknown, retryValue: unknown): JsonRecord {
+    const primary = { ...this.record(primaryValue) };
+    const retry = this.record(retryValue);
+    primary.items = Array.isArray(retry.items) ? retry.items : [];
+    const primaryWarnings = Array.isArray(primary.warnings)
+      ? primary.warnings.filter((warning) => !/no se identificaron partidas/i.test(String(warning)))
+      : [];
+    const retryWarnings = Array.isArray(retry.warnings) ? retry.warnings : [];
+    primary.warnings = [...primaryWarnings, ...retryWarnings];
+    return primary;
+  }
+
+  private hasLikelyItemTable(text: string): boolean {
+    const hasCommercialColumns = /(cantidad|cant\.?|qty|quantity)/i.test(text) &&
+      /(importe|subtotal|precio|p\.?\s*u\.?|unit\s*price)/i.test(text);
+    const hasPricedLine = /^\s*\d+\s+\d+(?:[.,]\d+)?\s+\S+.*(?:\$|USD|MXN)/im.test(text);
+    return hasCommercialColumns || hasPricedLine;
+  }
+
+  private sumUsage(first?: number, second?: number): number | undefined {
+    if (first === undefined && second === undefined) return undefined;
+    return (first ?? 0) + (second ?? 0);
   }
 
   private normalize(value: unknown, fileName: string): SupplierQuoteResult {
@@ -185,16 +247,145 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
     return Math.abs(left - right) <= Math.max(0.05, Math.abs(right) * 0.005);
   }
 
+  private fullResponseFormat() {
+    return {
+      type: "json_schema" as const,
+      json_schema: {
+        name: "supplier_quote",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["supplier", "header", "totals", "items", "warnings"],
+          properties: {
+            supplier: {
+              type: "object",
+              additionalProperties: false,
+              required: ["name", "taxId", "state", "contactName", "email", "phone", "confidence", "evidence"],
+              properties: {
+                name: { type: ["string", "null"] },
+                taxId: { type: ["string", "null"] },
+                state: { type: ["string", "null"] },
+                contactName: { type: ["string", "null"] },
+                email: { type: ["string", "null"] },
+                phone: { type: ["string", "null"] },
+                confidence: { type: "number" },
+                evidence: { type: ["string", "null"] },
+              },
+            },
+            header: {
+              type: "object",
+              additionalProperties: false,
+              required: ["reference", "quoteDate", "validUntil", "currency", "exchangeRate", "paymentTerms", "deliveryTerms"],
+              properties: {
+                reference: { type: ["string", "null"] },
+                quoteDate: { type: ["string", "null"] },
+                validUntil: { type: ["string", "null"] },
+                currency: { type: ["string", "null"], enum: ["MXN", "USD", null] },
+                exchangeRate: { type: ["number", "null"] },
+                paymentTerms: { type: ["string", "null"] },
+                deliveryTerms: { type: ["string", "null"] },
+              },
+            },
+            totals: {
+              type: "object",
+              additionalProperties: false,
+              required: ["subtotal", "discount", "freight", "otherCharges", "taxIncluded", "taxRate", "tax", "total"],
+              properties: {
+                subtotal: { type: ["number", "null"] },
+                discount: { type: ["number", "null"] },
+                freight: { type: ["number", "null"] },
+                otherCharges: { type: ["number", "null"] },
+                taxIncluded: { type: ["boolean", "null"] },
+                taxRate: { type: ["number", "null"] },
+                tax: { type: ["number", "null"] },
+                total: { type: ["number", "null"] },
+              },
+            },
+            items: { type: "array", items: this.itemSchema() },
+            warnings: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+    };
+  }
+
+  private itemsResponseFormat() {
+    return {
+      type: "json_schema" as const,
+      json_schema: {
+        name: "supplier_quote_items_retry",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["items", "warnings"],
+          properties: {
+            items: { type: "array", items: this.itemSchema() },
+            warnings: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+    };
+  }
+
+  private itemSchema() {
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "lineNumber", "supplierProductCode", "alternateCodes", "description", "quantity",
+        "unit", "listUnitPrice", "discountPct", "netUnitPrice", "subtotal", "brand",
+        "origin", "deliveryTime", "availableDate", "minimumQuantity", "confidence",
+        "requiresReview", "evidence",
+      ],
+      properties: {
+        lineNumber: { type: ["string", "null"] },
+        supplierProductCode: { type: ["string", "null"] },
+        alternateCodes: { type: "array", items: { type: "string" } },
+        description: { type: "string" },
+        quantity: { type: ["number", "null"] },
+        unit: { type: ["string", "null"] },
+        listUnitPrice: { type: ["number", "null"] },
+        discountPct: { type: ["number", "null"] },
+        netUnitPrice: { type: ["number", "null"] },
+        subtotal: { type: ["number", "null"] },
+        brand: { type: ["string", "null"] },
+        origin: { type: ["string", "null"] },
+        deliveryTime: { type: ["string", "null"] },
+        availableDate: { type: ["string", "null"] },
+        minimumQuantity: { type: ["number", "null"] },
+        confidence: { type: "number" },
+        requiresReview: { type: "boolean" },
+        evidence: { type: ["string", "null"] },
+      },
+    };
+  }
+
+  private itemRetryPrompt(): string {
+    return [
+      "Extrae exclusivamente todas las partidas reales de la cotizacion de proveedor.",
+      "Una fila con cantidad, unidad, descripcion y precio es una partida aunque sea la unica del documento.",
+      "No confundas encabezados, totales, impuestos ni numeros consecutivos vacios con partidas.",
+      "Conserva el orden y los valores impresos. No inventes datos ni conviertas moneda.",
+      "Devuelve la lista completa de items conforme al esquema solicitado.",
+    ].join("\n");
+  }
+
   private systemPrompt(): string {
-    return `Eres un extractor de cotizaciones de proveedores industriales. Devuelve exclusivamente JSON valido.
-No inventes datos. Usa null cuando el documento no muestre un valor. Conserva la descripcion comercial del proveedor.
-En supplier extrae a la empresa que emite la cotizacion, nunca a TUVANSA como cliente.
-Distingue precio de lista de precio neto. Aplica descuentos solo cuando sean explicitos. No conviertas monedas.
-Ignora renglones vacios y separa flete u otros cargos de las partidas. Las fechas deben ser YYYY-MM-DD.
-taxRate y discountPct son porcentajes numericos; confidence va de 0 a 1.
-Marca requiresReview cuando falten cantidad o precio neto, la moneda sea ambigua o el renglon sea dudoso.
-La evidencia debe ser un fragmento corto del documento.
-Esquema exacto:
-{"supplier":{"name":null,"taxId":null,"state":null,"contactName":null,"email":null,"phone":null,"confidence":0,"evidence":null},"header":{"reference":null,"quoteDate":null,"validUntil":null,"currency":"MXN|USD|null","exchangeRate":null,"paymentTerms":null,"deliveryTerms":null},"totals":{"subtotal":null,"discount":null,"freight":null,"otherCharges":null,"taxIncluded":null,"taxRate":null,"tax":null,"total":null},"items":[{"lineNumber":null,"supplierProductCode":null,"alternateCodes":[],"description":"","quantity":null,"unit":null,"listUnitPrice":null,"discountPct":null,"netUnitPrice":null,"subtotal":null,"brand":null,"origin":null,"deliveryTime":null,"availableDate":null,"minimumQuantity":null,"confidence":0,"requiresReview":true,"evidence":null}],"warnings":[]}`;
+    return [
+      "Eres un extractor de cotizaciones de proveedores industriales.",
+      "No inventes datos. Usa null cuando el documento no muestre un valor.",
+      "En supplier extrae exclusivamente la empresa que emite la cotizacion, nunca TUVANSA como cliente.",
+      "Extrae todas las partidas reales de material y conserva la descripcion comercial del proveedor.",
+      "Nunca devuelvas items vacio si existe al menos una fila con cantidad, descripcion y precio.",
+      "Una fila de material sigue siendo partida aunque sea la unica del documento.",
+      "Ignora renglones vacios, encabezados, numeros consecutivos sin datos, impuestos, totales y firmas.",
+      "Distingue precio de lista de precio neto. Aplica descuentos solo cuando sean explicitos.",
+      "No conviertas monedas. Las fechas deben ser YYYY-MM-DD.",
+      "taxRate y discountPct son porcentajes numericos; confidence va de 0 a 1.",
+      "Marca requiresReview cuando falten cantidad o precio neto, la moneda sea ambigua o el renglon sea dudoso.",
+      "La evidencia debe ser un fragmento corto del renglon fuente.",
+    ].join("\n");
   }
 }
