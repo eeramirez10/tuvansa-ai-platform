@@ -1,13 +1,14 @@
 import OpenAI from "openai";
 import { QuantityNormalizerService } from "../../document-extraction/infrastructure/normalization/quantity-normalizer.service";
 import { UnitNormalizerService } from "../../document-extraction/infrastructure/normalization/unit-normalizer.service";
+import { CanonicalUnit, ERP_MEASUREMENT_UNITS } from "../../document-extraction/domain/quote-item.entity";
 import { StructuredAiProcessorPort } from "../application/ports/structured-ai-processor.port";
 import {
   MissingProductNormalizationInput,
   MissingProductsRequestDto,
 } from "../domain/missing-products-request.dto";
 
-type OutputUnit = "KG" | "M" | "FT" | "PZA" | "TRAMO" | "SE" | null;
+type OutputUnit = CanonicalUnit | null;
 
 interface NormalizedMissingProduct {
   item_id: string;
@@ -98,7 +99,7 @@ export class OpenAiMissingProductsProcessor implements StructuredAiProcessorPort
                     unit_original: { type: ["string", "null"] },
                     unit_normalized: {
                       type: ["string", "null"],
-                      enum: ["KG", "M", "FT", "PZA", "TRAMO", "SE", null],
+                      enum: [...ERP_MEASUREMENT_UNITS, null],
                     },
                     ean_suggested: { type: ["string", "null"] },
                     confidence: { type: "number" },
@@ -149,11 +150,10 @@ export class OpenAiMissingProductsProcessor implements StructuredAiProcessorPort
     const descriptionNormalized = (this.compact(raw.description_normalized) || descriptionOriginal).toLowerCase();
     const quantity = this.quantityNormalizer.normalize(raw.quantity ?? input.quantity);
     const originalUnit = this.compact(raw.unit_original) || this.compact(input.unit) || null;
-    const normalizedUnit = this.outputUnit(
+    const normalizedUnit =
       this.unitNormalizer.normalize(raw.unit_normalized) ??
       this.unitNormalizer.normalize(originalUnit) ??
-      this.unitNormalizer.detectFromDescription(descriptionNormalized),
-    );
+      this.unitNormalizer.detectFromDescription(descriptionNormalized);
     const confidence = this.confidence(raw.confidence, quantity, normalizedUnit);
     const eanSuggested = this.ean(raw.ean_suggested);
     return {
@@ -173,10 +173,8 @@ export class OpenAiMissingProductsProcessor implements StructuredAiProcessorPort
     const descriptionOriginal = this.compact(input.description);
     const descriptionNormalized = descriptionOriginal.toLowerCase();
     const quantity = this.quantityNormalizer.normalize(input.quantity);
-    const normalizedUnit = this.outputUnit(
-      this.unitNormalizer.normalize(input.unit) ??
-      this.unitNormalizer.detectFromDescription(descriptionNormalized),
-    );
+    const normalizedUnit = this.unitNormalizer.normalize(input.unit) ??
+      this.unitNormalizer.detectFromDescription(descriptionNormalized);
     const requiresReview = quantity === null || normalizedUnit === null;
     return {
       item_id: input.itemId,
@@ -193,16 +191,6 @@ export class OpenAiMissingProductsProcessor implements StructuredAiProcessorPort
 
   private compact(value: unknown): string {
     return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
-  }
-
-  private outputUnit(value: string | null): OutputUnit {
-    if (value === "kg") return "KG";
-    if (value === "m") return "M";
-    if (value === "ft") return "FT";
-    if (value === "pza") return "PZA";
-    if (value === "tramo") return "TRAMO";
-    if (value === "se") return "SE";
-    return null;
   }
 
   private confidence(value: unknown, quantity: number | null, unit: OutputUnit): number {
@@ -223,7 +211,7 @@ export class OpenAiMissingProductsProcessor implements StructuredAiProcessorPort
       "Estandariza partidas faltantes del ERP para productos temporales locales.",
       "No inventes marca, modelo, medidas ni EAN.",
       "Mantener item_id exactamente igual y conservar el orden.",
-      "Unidades permitidas: KG, M, FT, PZA, TRAMO, SE o null.",
+      "Unidades permitidas: PZ, K, M, L, TR, SE, ACT, FT, XRO, UNO, M2, LOT, CON o null.",
       "description_normalized debe ser limpia y apta para busqueda semantica.",
       "Si quantity o unit no son confiables usa null y requires_review=true.",
       "confidence debe estar entre 0 y 1.",

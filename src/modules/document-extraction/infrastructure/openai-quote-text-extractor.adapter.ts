@@ -4,8 +4,8 @@ import {
   QuoteTextExtractorPort,
 } from "../application/ports/quote-text-extractor.port";
 import {
-  CanonicalUnit,
   DetectedLanguage,
+  ERP_MEASUREMENT_UNITS,
   QuoteItem,
 } from "../domain/quote-item.entity";
 import { LanguageDetectorService } from "./normalization/language-detector.service";
@@ -13,7 +13,6 @@ import { QuantityNormalizerService } from "./normalization/quantity-normalizer.s
 import { UnitNormalizerService } from "./normalization/unit-normalizer.service";
 import { ExtractedPartyData } from "../../ai-assistance/domain/party-data.types";
 
-const ALLOWED_UNITS = new Set<CanonicalUnit>(["kg", "m", "ft", "pza", "tramo", "se"]);
 const ALLOWED_LANGUAGES = new Set<DetectedLanguage>(["es", "en", "mixed"]);
 
 export class OpenAiQuoteTextExtractorAdapter implements QuoteTextExtractorPort {
@@ -69,7 +68,7 @@ export class OpenAiQuoteTextExtractorAdapter implements QuoteTextExtractorPort {
                     unidad_original: { type: ["string", "null"] },
                     unidad_normalizada: {
                       type: ["string", "null"],
-                      enum: ["kg", "m", "ft", "pza", "tramo", "se", null]
+                      enum: [...ERP_MEASUREMENT_UNITS, null]
                     },
                     idioma: { type: "string", enum: ["es", "en", "mixed"] },
                     requiere_revision: { type: "boolean" }
@@ -112,10 +111,7 @@ export class OpenAiQuoteTextExtractorAdapter implements QuoteTextExtractorPort {
       const descriptionNormalized = this.text(raw.description_normalizada) || descriptionOriginal;
       const quantity = this.quantityNormalizer.normalize(raw.cantidad);
       const originalUnit = this.text(raw.unidad_original) || null;
-      const modelUnit = ALLOWED_UNITS.has(raw.unidad_normalizada as CanonicalUnit)
-        ? raw.unidad_normalizada as CanonicalUnit
-        : null;
-      const normalizedUnit = modelUnit ??
+      const normalizedUnit = this.unitNormalizer.normalize(raw.unidad_normalizada) ??
         this.unitNormalizer.normalize(originalUnit) ??
         this.unitNormalizer.detectFromDescription(descriptionOriginal);
       const language = ALLOWED_LANGUAGES.has(raw.idioma as DetectedLanguage)
@@ -286,6 +282,7 @@ export class OpenAiQuoteTextExtractorAdapter implements QuoteTextExtractorPort {
       "In customer, extract the company or person requesting the quotation only when explicitly identifiable; never return TUVANSA or the seller as customer.",
       "Separate customer contacts and address fields. Use null for customer when identity is not supported by the content.",
       "Do not invent quantity or unit.",
+      "unidad_normalizada must use only the ERP codes PZ, K, M, L, TR, SE, ACT, FT, XRO, UNO, M2, LOT or CON.",
       "Keep the source order.",
       "When EXTRACTION_HINTS are present, use them to reconcile each structured row with its description, technical attributes, quantity and unit.",
       "Use requiere_revision=true when quantity or normalized unit is missing."

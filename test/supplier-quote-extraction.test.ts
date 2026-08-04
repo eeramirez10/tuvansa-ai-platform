@@ -92,6 +92,9 @@ test("retries item extraction when a supplier table returns no items", async () 
   assert.deepEqual(responseFormats, ["json_schema", "json_schema"]);
   assert.equal(extraction.result.items.length, 1);
   assert.equal(extraction.result.items[0]?.quantity, 1331.2);
+  assert.equal(extraction.result.items[0]?.unitOriginal, "MTS");
+  assert.equal(extraction.result.items[0]?.unit, "M");
+  assert.equal(extraction.result.items[0]?.requiresReview, false);
   assert.equal(extraction.usage.inputTokens, 200);
   assert.equal(extraction.usage.outputTokens, 50);
 });

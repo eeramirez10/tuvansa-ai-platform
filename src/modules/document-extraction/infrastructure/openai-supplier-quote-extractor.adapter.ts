@@ -6,6 +6,7 @@ import {
   SupplierQuoteExtractorPort,
   SupplierQuoteResult,
 } from "../application/ports/supplier-quote-extractor.port";
+import { UnitNormalizerService } from "./normalization/unit-normalizer.service";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -16,6 +17,7 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
     apiKey: string,
     private readonly model: string,
     client?: OpenAI,
+    private readonly unitNormalizer = new UnitNormalizerService(),
   ) {
     this.client = client ?? new OpenAI({ apiKey });
   }
@@ -239,6 +241,12 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
       warnings.push(`La partida "${description.slice(0, 80)}" tiene un subtotal inconsistente.`);
     }
     const itemConfidence = this.confidence(raw.confidence);
+    const unitOriginal = this.text(raw.unit);
+    const unit = this.unitNormalizer.normalize(unitOriginal) ??
+      this.unitNormalizer.detectFromDescription(`${quantity ?? ""} ${unitOriginal ?? ""} ${description}`);
+    if (unitOriginal && !unit) {
+      warnings.push(`La unidad "${unitOriginal}" de la partida "${description.slice(0, 80)}" no existe en el catalogo ERP.`);
+    }
     return {
       lineNumber: this.text(raw.lineNumber),
       supplierProductCode: this.text(raw.supplierProductCode),
@@ -247,7 +255,8 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
         : [],
       description,
       quantity,
-      unit: this.text(raw.unit),
+      unitOriginal,
+      unit,
       listUnitPrice,
       discountPct,
       netUnitPrice,
@@ -258,7 +267,7 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
       availableDate: this.date(raw.availableDate),
       minimumQuantity: this.number(raw.minimumQuantity),
       confidence: itemConfidence,
-      requiresReview: raw.requiresReview === true || quantity === null || netUnitPrice === null || itemConfidence < 0.8,
+      requiresReview: raw.requiresReview === true || quantity === null || unit === null || netUnitPrice === null || itemConfidence < 0.8,
       evidence: this.text(raw.evidence),
     };
   }
@@ -451,6 +460,7 @@ export class OpenAiSupplierQuoteExtractorAdapter implements SupplierQuoteExtract
       "Separa cualquier extension telefonica en contacts.extension y deja contacts.value solo con el numero principal.",
       "Deduplica contactos repetidos y conserva contacts.contactName, contacts.contactPosition y contacts.label cuando el documento los asocie.",
       "Extrae todas las partidas reales de material y conserva la descripcion comercial del proveedor.",
+      "En unit conserva exactamente la unidad impresa; el sistema la normalizara despues al catalogo ERP.",
       "Nunca devuelvas items vacio si existe al menos una fila con cantidad, descripcion y precio.",
       "Una fila de material sigue siendo partida aunque sea la unica del documento.",
       "Ignora renglones vacios, encabezados, numeros consecutivos sin datos, impuestos, totales y firmas.",

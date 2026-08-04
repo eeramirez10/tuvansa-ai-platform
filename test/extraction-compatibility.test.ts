@@ -74,10 +74,17 @@ function job(type: AiJobType): AiJob {
 
 test("normalizes legacy unit abbreviations used by sales files", () => {
   const normalizer = new UnitNormalizerService();
-  assert.equal(normalizer.normalize("PZAS"), "pza");
-  assert.equal(normalizer.normalize("MTS"), "m");
-  assert.equal(normalizer.normalize("TR"), "tramo");
-  assert.equal(normalizer.detectFromDescription("10 pcs VALVE"), "pza");
+  const cases = [
+    ["PZAS", "PZ"], ["KILOS", "K"], ["MTS", "M"], ["LITROS", "L"],
+    ["TMO", "TR"], ["SERVICIO", "SE"], ["ACTIVIDAD", "ACT"], ["PIES", "FT"],
+    ["ROLLOS", "XRO"], ["UNIDAD", "UNO"], ["M²", "M2"], ["LOTE", "LOT"],
+    ["CONJUNTO", "CON"],
+  ] as const;
+  cases.forEach(([input, expected]) => assert.equal(normalizer.normalize(input), expected));
+  assert.equal(normalizer.detectFromDescription("10 pcs VALVE"), "PZ");
+  assert.equal(normalizer.detectFromDescription("TUBO ASTM A312 4 M DE LARGO"), "M");
+  assert.equal(normalizer.detectFromDescription("PISO DE 10 METROS CUADRADOS"), "M2");
+  assert.equal(normalizer.normalize("CAJA"), null);
 });
 
 test("processes quoted Excel with the current frontend response contract", async () => {

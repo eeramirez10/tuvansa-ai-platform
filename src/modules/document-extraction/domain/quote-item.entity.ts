@@ -1,5 +1,20 @@
 export type DetectedLanguage = "es" | "en" | "mixed";
-export type CanonicalUnit = "kg" | "m" | "ft" | "pza" | "tramo" | "se";
+export const ERP_MEASUREMENT_UNITS = [
+  "PZ",
+  "K",
+  "M",
+  "L",
+  "TR",
+  "SE",
+  "ACT",
+  "FT",
+  "XRO",
+  "UNO",
+  "M2",
+  "LOT",
+  "CON",
+] as const;
+export type CanonicalUnit = (typeof ERP_MEASUREMENT_UNITS)[number];
 
 export interface QuoteItemProps {
   descriptionOriginal: string;

@@ -1,4 +1,5 @@
 import { AiUsage } from "./quote-text-extractor.port";
+import { CanonicalUnit } from "../../domain/quote-item.entity";
 
 export interface SupplierQuoteExtractedItem {
   lineNumber: string | null;
@@ -6,7 +7,8 @@ export interface SupplierQuoteExtractedItem {
   alternateCodes: string[];
   description: string;
   quantity: number | null;
-  unit: string | null;
+  unitOriginal: string | null;
+  unit: CanonicalUnit | null;
   listUnitPrice: number | null;
   discountPct: number | null;
   netUnitPrice: number | null;
