@@ -17,6 +17,7 @@ export class SemanticCatalogController {
       limit: request.limit,
       filters: request.filters,
       includeAvailability: true,
+      availabilityWarehouseCodes: request.warehouseCodes,
     });
     res.status(200).json(SemanticCatalogPresenter.vectorSearch(this.indexName, request, result));
   };
@@ -29,6 +30,7 @@ export class SemanticCatalogController {
       limit: request.limit,
       filters: request.filters,
       includeAvailability: true,
+      availabilityWarehouseCodes: request.warehouseCodes,
     });
     res.status(200).json(SemanticCatalogPresenter.hybridVectorSearch(this.indexName, request, result));
   };
@@ -41,6 +43,7 @@ export class SemanticCatalogController {
       limit: request.limit,
       filters: request.filters,
       includeAvailability: true,
+      availabilityWarehouseCodes: request.warehouseCodes,
     });
     res.status(200).json(SemanticCatalogPresenter.quoteSearch(this.indexName, request, result));
   };
@@ -53,6 +56,7 @@ export class SemanticCatalogController {
       limit: request.limit,
       filters: request.filters,
       includeAvailability: true,
+      availabilityWarehouseCodes: request.warehouseCodes,
     });
     res.status(200).json(SemanticCatalogPresenter.hybridQuoteSearch(this.indexName, request, result));
   };

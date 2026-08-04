@@ -17,7 +17,7 @@ export class ErpProductAvailabilityHttpAdapter implements ProductAvailabilityPor
     return Boolean(this.baseUrl?.trim());
   }
 
-  public async findByEans(eans: string[]): Promise<ProductAvailability[]> {
+  public async findByEans(eans: string[], warehouseCodes?: string[]): Promise<ProductAvailability[]> {
     if (!this.isEnabled() || eans.length === 0) return [];
 
     const controller = new AbortController();
@@ -33,7 +33,10 @@ export class ErpProductAvailabilityHttpAdapter implements ProductAvailabilityPor
             "content-type": "application/json",
             ...(this.apiKey ? { "x-internal-api-key": this.apiKey } : {}),
           },
-          body: JSON.stringify({ eans }),
+          body: JSON.stringify({
+            eans,
+            ...(warehouseCodes?.length ? { warehouseCodes } : {}),
+          }),
         },
       );
       if (!response.ok) {

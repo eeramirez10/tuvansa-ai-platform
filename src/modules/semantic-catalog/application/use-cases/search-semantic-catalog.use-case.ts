@@ -16,6 +16,7 @@ export interface SearchSemanticCatalogInput {
   limit: number;
   filters: Record<string, string>;
   includeAvailability?: boolean;
+  availabilityWarehouseCodes?: string[];
 }
 
 export interface SearchSemanticCatalogResult {
@@ -37,7 +38,11 @@ export class SearchSemanticCatalogUseCase {
     const vector = await this.embeddings.embedQuery(input.query);
     const matches = await this.vectorIndex.query(vector, input.candidateTopK, input.filters);
     const ranked = SemanticCatalogRankingService.rank(matches).slice(0, input.limit);
-    const availability = await this.resolveAvailability(ranked, Boolean(input.includeAvailability));
+    const availability = await this.resolveAvailability(
+      ranked,
+      Boolean(input.includeAvailability),
+      input.availabilityWarehouseCodes,
+    );
 
     return { matches: ranked, ...availability };
   }
@@ -49,7 +54,11 @@ export class SearchSemanticCatalogUseCase {
     const ranked = SemanticCatalogRankingService
       .rankHybrid(matches, parsedQuery)
       .slice(0, input.limit);
-    const availability = await this.resolveAvailability(ranked, Boolean(input.includeAvailability));
+    const availability = await this.resolveAvailability(
+      ranked,
+      Boolean(input.includeAvailability),
+      input.availabilityWarehouseCodes,
+    );
 
     return { matches: ranked, parsedQuery, ...availability };
   }
@@ -57,6 +66,7 @@ export class SearchSemanticCatalogUseCase {
   private async resolveAvailability(
     matches: SemanticCatalogMatch[],
     requested: boolean,
+    warehouseCodes?: string[],
   ): Promise<Pick<SearchSemanticCatalogResult, "availabilityStatus" | "availabilityByEan" | "availabilityError">> {
     if (!requested) {
       return { availabilityStatus: "not_requested", availabilityByEan: new Map(), availabilityError: null };
@@ -67,7 +77,7 @@ export class SearchSemanticCatalogUseCase {
 
     try {
       const eans = Array.from(new Set(matches.map((match) => match.ean).filter(Boolean)));
-      const products = await this.availability.findByEans(eans);
+      const products = await this.availability.findByEans(eans, warehouseCodes);
       return {
         availabilityStatus: "resolved",
         availabilityByEan: new Map(products.map((product) => [product.ean, product])),

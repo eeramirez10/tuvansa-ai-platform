@@ -232,7 +232,7 @@ test("local product lifecycle writes normalized vectors and deletes the same vec
   assert.deepEqual(index.deleted, [["local:product-9"]]);
 });
 
-test("quote semantic response expands ERP codes with branch, stock, currency and costs", async () => {
+test("quote semantic response expands ERP codes with assigned warehouse, stock, currency and costs", async () => {
   const embeddings = new FakeEmbeddings();
   const index = new FakeVectorIndex();
   index.matches = [{
@@ -254,7 +254,7 @@ test("quote semantic response expands ERP codes with branch, stock, currency and
     costs: { average: 100, last: 120, currency: "MXN" },
     totalStock: 12,
     availableInAnyBranch: true,
-    branches: [{ branchCode: "01", branchName: "MEXICO", stock: 12, available: true }],
+    branches: [{ branchCode: "15", branchName: "RESGUARDO QUERETARO", stock: 12, available: true }],
     codes: [{
       icod: "01300100",
       homeBranchCode: "01",
@@ -264,7 +264,7 @@ test("quote semantic response expands ERP codes with branch, stock, currency and
       costs: { average: 100, last: 120, currency: "MXN" },
       totalStock: 12,
       availableInAnyBranch: true,
-      branches: [{ branchCode: "01", branchName: "MEXICO", stock: 12, available: true }],
+      branches: [{ branchCode: "15", branchName: "RESGUARDO QUERETARO", stock: 12, available: true }],
     }],
   };
   const useCase = new SearchSemanticCatalogUseCase(
@@ -281,7 +281,9 @@ test("quote semantic response expands ERP codes with branch, stock, currency and
   });
   const response = SemanticCatalogPresenter.quoteSearch("proscai-catalog-v2", {
     query: "tubo acero",
-    branchCode: "01",
+    branchCode: "15",
+    warehouseCodes: ["15"],
+    authorizedWarehouseCodes: ["15"],
     candidateTopK: 30,
     limit: 10,
     filters: {},
@@ -292,6 +294,9 @@ test("quote semantic response expands ERP codes with branch, stock, currency and
   assert.equal(response.items[0]?.branchProduct?.code, "01300100");
   assert.equal(response.items[0]?.branchProduct?.currency, "MXN");
   assert.equal(response.items[0]?.branchProduct?.lastCost, 120);
+  assert.equal(response.items[0]?.branchProduct?.branchCode, "15");
+  assert.equal(response.items[0]?.branchProduct?.branchName, "RESGUARDO QUERETARO");
+  assert.equal(response.items[0]?.authorized, true);
   assert.equal(response.items[0]?.stockAvailableInBranch, true);
 });
 

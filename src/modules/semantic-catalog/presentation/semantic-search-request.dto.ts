@@ -3,6 +3,8 @@ import { AppError } from "../../../shared/domain/app-error";
 export interface SemanticSearchRequestProps {
   query: string;
   branchCode: string | null;
+  warehouseCodes: string[];
+  authorizedWarehouseCodes: string[];
   candidateTopK: number;
   limit: number;
   filters: Record<string, string>;
@@ -42,9 +44,12 @@ export class SemanticSearchRequestDto {
       200,
       "candidateTopK",
     );
+    const branchCode = this.branchCode(body.branchCode, false);
     return new SemanticSearchRequestDto({
       query,
-      branchCode: this.branchCode(body.branchCode, false),
+      branchCode,
+      warehouseCodes: branchCode ? [branchCode] : [],
+      authorizedWarehouseCodes: branchCode ? [branchCode] : [],
       candidateTopK,
       limit,
       filters: this.filters(body.filters),
@@ -54,10 +59,28 @@ export class SemanticSearchRequestDto {
   public static fromQuoteSearch(input: unknown): SemanticSearchRequestDto {
     const body = this.body(input);
     const branchInput = body.branchCode ?? body.branch_code;
+    const warehouseCodes = this.warehouseCodes(body.warehouseCodes ?? body.warehouse_codes);
+    const requestedAuthorizedCodes = this.warehouseCodes(
+      body.authorizedWarehouseCodes ?? body.authorized_warehouse_codes,
+    );
+    const branchCode = warehouseCodes[0] ?? this.branchCode(branchInput, true)!;
+    const resolvedWarehouseCodes = warehouseCodes.length > 0 ? warehouseCodes : [branchCode];
+    const authorizedWarehouseCodes = requestedAuthorizedCodes.length > 0
+      ? requestedAuthorizedCodes
+      : resolvedWarehouseCodes;
+    if (authorizedWarehouseCodes.some((code) => !resolvedWarehouseCodes.includes(code))) {
+      throw new AppError(
+        "Every authorized warehouse must be included in warehouseCodes.",
+        400,
+        "INVALID_AUTHORIZED_WAREHOUSES",
+      );
+    }
     const candidateInput = body.topK ?? body.top_k;
     return new SemanticSearchRequestDto({
       query: this.query(body.query),
-      branchCode: this.branchCode(branchInput, true),
+      branchCode,
+      warehouseCodes: resolvedWarehouseCodes,
+      authorizedWarehouseCodes,
       candidateTopK: this.integer(candidateInput, 30, 5, 50, "topK"),
       limit: this.integer(body.limit, 10, 1, 20, "limit"),
       filters: this.filters(body.filters),
@@ -90,6 +113,29 @@ export class SemanticSearchRequestDto {
       );
     }
     return branchCode;
+  }
+
+  private static warehouseCodes(value: unknown): string[] {
+    if (value === undefined || value === null) return [];
+    if (!Array.isArray(value) || value.length === 0 || value.length > 25) {
+      throw new AppError(
+        "'warehouseCodes' must be a non-empty array with a maximum of 25 values.",
+        400,
+        "INVALID_WAREHOUSE_CODES",
+      );
+    }
+    const codes = value.map((item) => {
+      const code = typeof item === "string" ? item.trim() : "";
+      if (!/^\d{1,4}$/.test(code)) {
+        throw new AppError(
+          "Every warehouse code must contain between 1 and 4 digits.",
+          400,
+          "INVALID_WAREHOUSE_CODE",
+        );
+      }
+      return code.padStart(2, "0");
+    });
+    return Array.from(new Set(codes));
   }
 
   private static integer(

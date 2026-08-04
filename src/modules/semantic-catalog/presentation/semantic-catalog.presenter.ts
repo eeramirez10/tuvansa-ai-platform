@@ -1,6 +1,7 @@
 import { SearchSemanticCatalogResult } from "../application/use-cases/search-semantic-catalog.use-case";
 import {
   ProductCodeAvailability,
+  ProductBranchAvailability,
   SemanticCatalogMatch,
   VectorMetadata,
 } from "../domain/semantic-catalog.types";
@@ -14,6 +15,7 @@ const BRANCH_NAMES: Record<string, string> = {
   "05": "QUERETARO",
   "06": "CANCUN",
   "07": "LOS CABOS",
+  "15": "RESGUARDO QUERETARO",
 };
 
 export class SemanticCatalogPresenter {
@@ -45,6 +47,8 @@ export class SemanticCatalogPresenter {
       index,
       query: request.query,
       branchCode: request.branchCode,
+      warehouseCodes: request.warehouseCodes ?? [],
+      authorizedWarehouseCodes: request.authorizedWarehouseCodes ?? [],
       topK: request.limit,
       filters: request.filters,
       ...(semanticOnly ? { rankingStrategy: "SEMANTIC_ONLY" } : {}),
@@ -106,6 +110,11 @@ export class SemanticCatalogPresenter {
     result: SearchSemanticCatalogResult,
   ) {
     const branchCode = request.branchCode!;
+    const warehouseCodes = request.warehouseCodes?.length ? request.warehouseCodes : [branchCode];
+    const authorizedWarehouseCodes = request.authorizedWarehouseCodes?.length
+      ? request.authorizedWarehouseCodes
+      : warehouseCodes;
+    const authorized = new Set(authorizedWarehouseCodes);
     const items: Array<
       ReturnType<typeof SemanticCatalogPresenter.quoteItem>
       | ReturnType<typeof SemanticCatalogPresenter.unresolvedQuoteItem>
@@ -119,13 +128,26 @@ export class SemanticCatalogPresenter {
       }
 
       const eanTotalStock = availability?.totalStock ?? 0;
-      items.push(...[...codes]
+      const resolvedItems = codes.flatMap((code) => code.branches
+        .filter((warehouse) => warehouseCodes.includes(warehouse.branchCode))
+        .map((warehouse) => this.quoteItem(
+          match,
+          code,
+          warehouse,
+          authorized.has(warehouse.branchCode),
+          eanTotalStock,
+          source,
+        )))
         .sort((left, right) => {
-          const leftRequested = left.homeBranchCode === branchCode ? 1 : 0;
-          const rightRequested = right.homeBranchCode === branchCode ? 1 : 0;
-          return rightRequested - leftRequested || left.icod.localeCompare(right.icod);
-        })
-        .map((code) => this.quoteItem(match, code, branchCode, eanTotalStock, source)));
+          const leftAuthorized = left.authorized ? 1 : 0;
+          const rightAuthorized = right.authorized ? 1 : 0;
+          return rightAuthorized - leftAuthorized
+            || (right.branchProduct?.stock ?? 0) - (left.branchProduct?.stock ?? 0)
+            || left.branchProductCode.localeCompare(right.branchProductCode)
+            || left.resolvedBranchCode.localeCompare(right.resolvedBranchCode);
+        });
+      if (resolvedItems.length > 0) items.push(...resolvedItems);
+      else items.push(this.unresolvedQuoteItem(match, branchCode, source));
     }
 
     return {
@@ -133,6 +155,8 @@ export class SemanticCatalogPresenter {
       index,
       query: request.query,
       branchCode,
+      warehouseCodes,
+      authorizedWarehouseCodes,
       availabilityStatus: result.availabilityStatus,
       availabilityError: result.availabilityError,
       semanticMatchesCount: result.matches.length,
@@ -144,36 +168,36 @@ export class SemanticCatalogPresenter {
   private static quoteItem(
     match: SemanticCatalogMatch,
     code: ProductCodeAvailability,
-    requestedBranchCode: string,
+    warehouse: ProductBranchAvailability,
+    authorized: boolean,
     eanTotalStock: number,
     source: "proscai-catalog-v2" | "proscai-catalog-v2-semantic",
   ) {
-    const resolvedBranchCode = code.homeBranchCode ?? "";
-    const resolvedBranchName = code.homeBranchName
-      ?? BRANCH_NAMES[resolvedBranchCode]
-      ?? "SUCURSAL DESCONOCIDA";
-    const homeBranchStock = code.branches
-      .find((branch) => branch.branchCode === resolvedBranchCode)?.stock ?? 0;
-    const registeredInBranch = resolvedBranchCode === requestedBranchCode;
+    const resolvedBranchCode = warehouse.branchCode;
+    const resolvedBranchName = warehouse.branchName
+      || BRANCH_NAMES[resolvedBranchCode]
+      || `ALMACEN ${resolvedBranchCode}`;
+    const homeBranchStock = warehouse.stock;
     const description = code.description
       || this.metadataText(match.metadata, "normalizedDescription")
       || "";
     const originalDescription = this.metadataText(match.metadata, "originalDescription") ?? "";
 
     return {
-      ...this.quoteMatch(match, requestedBranchCode, source),
+      ...this.quoteMatch(match, resolvedBranchCode, source),
       description,
       originalDescription,
       branchProductCode: code.icod,
-      availableInBranch: registeredInBranch,
+      availableInBranch: true,
       availableInAnyBranch: Boolean(resolvedBranchCode),
-      registeredInBranch,
-      stockAvailableInBranch: registeredInBranch && homeBranchStock > 0,
+      registeredInBranch: true,
+      stockAvailableInBranch: homeBranchStock > 0,
       stockAvailableInAnyBranch: code.totalStock > 0,
       resolvedBranchCode,
       codeTotalStock: code.totalStock,
       eanTotalStock,
       branches: code.branches,
+      authorized,
       branchProduct: {
         branchCode: resolvedBranchCode,
         branchName: resolvedBranchName,
@@ -186,6 +210,7 @@ export class SemanticCatalogPresenter {
         currency: code.costs.currency,
         averageCost: code.costs.average,
         lastCost: code.costs.last,
+        authorized,
       },
     };
   }
@@ -209,6 +234,7 @@ export class SemanticCatalogPresenter {
       codeTotalStock: 0,
       eanTotalStock: 0,
       branches: [],
+      authorized: false,
       branchProduct: null,
     };
   }
