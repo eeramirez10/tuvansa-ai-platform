@@ -1,0 +1,191 @@
+name: tuvansa-ai-platform
+
+x-app-common: &app-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: runtime
+  env_file:
+    - .env
+  environment: &app-environment
+    NODE_ENV: production
+    DATABASE_URL: ${AI_DATABASE_URL:?AI_DATABASE_URL is required}
+    REDIS_URL: redis://redis:6379
+    DOCUMENT_STORAGE_DIRECTORY: /app/storage/uploads
+  volumes:
+    - ai_documents:/app/storage
+  init: true
+  read_only: true
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  tmpfs:
+    - /tmp:mode=1777,size=128m
+  logging:
+    driver: local
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  volume-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - mkdir -p /app/storage/uploads && chown -R node:node /app/storage
+    volumes:
+      - ai_documents:/app/storage
+    restart: "no"
+    networks:
+      - ai-internal
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tuvansa_ai
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${AI_POSTGRES_PASSWORD:?AI_POSTGRES_PASSWORD is required}
+    volumes:
+      - ai_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tuvansa_ai"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - ai-internal
+    shm_size: 256mb
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - ai_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - ai-internal
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${AI_DATABASE_URL:?AI_DATABASE_URL is required}
+    command: ["pnpm", "prisma:deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    restart: "no"
+    profiles:
+      - maintenance
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:mode=1777,size=64m
+    networks:
+      - ai-internal
+
+  api:
+    <<: *app-common
+    container_name: tuvansa-ai-platform
+    environment:
+      <<: *app-environment
+      API_PORT: "4700"
+    ports:
+      - "127.0.0.1:4700:4700"
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:4700/health/ready')
+          .then(response => {
+            if (!response.ok) process.exit(1);
+          })
+          .catch(() => process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 30s
+    networks:
+      ai-internal:
+      infra-network:
+        aliases:
+          - tuvansa-ai-platform
+
+  worker:
+    <<: *app-common
+    container_name: tuvansa-ai-worker
+    command: ["node", "dist/apps/worker.js"]
+    depends_on:
+      volume-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    stop_grace_period: 60s
+    networks:
+      - ai-internal
+
+volumes:
+  ai_documents:
+    external: true
+    name: tuvansa-ai-platform-documents
+  ai_postgres_data:
+    external: true
+    name: tuvansa-ai-platform-postgres
+  ai_redis_data:
+    external: true
+    name: tuvansa-ai-platform-redis
+
+networks:
+  ai-internal:
+    driver: bridge
+  infra-network:
+    external: true
+    name: infra-network
