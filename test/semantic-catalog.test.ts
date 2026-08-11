@@ -251,7 +251,7 @@ test("quote semantic response expands ERP codes with assigned warehouse, stock, 
     hasMultipleProductCodes: false,
     description: "TUBO ACERO",
     unit: "M",
-    costs: { average: 100, last: 120, currency: "MXN" },
+    costs: { average: 100, last: 120, currency: "MXN", saleCurrency: "USD" },
     totalStock: 12,
     availableInAnyBranch: true,
     branches: [{ branchCode: "15", branchName: "RESGUARDO QUERETARO", stock: 12, available: true }],
@@ -261,7 +261,7 @@ test("quote semantic response expands ERP codes with assigned warehouse, stock, 
       homeBranchName: "MEXICO",
       description: "TUBO ACERO ERP",
       unit: "M",
-      costs: { average: 100, last: 120, currency: "MXN" },
+      costs: { average: 100, last: 120, currency: "MXN", saleCurrency: "USD" },
       totalStock: 12,
       availableInAnyBranch: true,
       branches: [{ branchCode: "15", branchName: "RESGUARDO QUERETARO", stock: 12, available: true }],
@@ -292,7 +292,9 @@ test("quote semantic response expands ERP codes with assigned warehouse, stock, 
   assert.equal(response.itemsCount, 1);
   assert.equal(response.items[0]?.rankingStrategy, "SEMANTIC_ONLY");
   assert.equal(response.items[0]?.branchProduct?.code, "01300100");
-  assert.equal(response.items[0]?.branchProduct?.currency, "MXN");
+  assert.equal(response.items[0]?.branchProduct?.currency, "USD");
+  assert.equal(response.items[0]?.branchProduct?.saleCurrency, "USD");
+  assert.equal(response.items[0]?.branchProduct?.costCurrency, "MXN");
   assert.equal(response.items[0]?.branchProduct?.lastCost, 120);
   assert.equal(response.items[0]?.branchProduct?.branchCode, "15");
   assert.equal(response.items[0]?.branchProduct?.branchName, "RESGUARDO QUERETARO");

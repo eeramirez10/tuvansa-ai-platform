@@ -29,6 +29,7 @@ export interface ProductAvailabilityCosts {
   average: number;
   last: number;
   currency: ProductAvailabilityCurrency;
+  saleCurrency: ProductAvailabilityCurrency;
 }
 
 export interface ProductBranchAvailability {

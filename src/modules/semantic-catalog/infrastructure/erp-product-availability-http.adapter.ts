@@ -77,7 +77,8 @@ export class ErpProductAvailabilityHttpAdapter implements ProductAvailabilityPor
       costs: {
         average: this.number(costs.average),
         last: this.number(costs.last),
-        currency: this.currency(costs.currency),
+        currency: typeof costs.saleCurrency === "undefined" ? "MXN" : this.currency(costs.currency),
+        saleCurrency: this.currency(costs.saleCurrency ?? costs.currency),
       },
       totalStock: this.number(item.totalStock),
       availableInAnyBranch: Boolean(item.availableInAnyBranch),
@@ -103,7 +104,8 @@ export class ErpProductAvailabilityHttpAdapter implements ProductAvailabilityPor
       costs: {
         average: this.number(costs.average),
         last: this.number(costs.last),
-        currency: this.currency(costs.currency),
+        currency: typeof costs.saleCurrency === "undefined" ? "MXN" : this.currency(costs.currency),
+        saleCurrency: this.currency(costs.saleCurrency ?? costs.currency),
       },
       totalStock: this.number(code.totalStock),
       availableInAnyBranch: Boolean(code.availableInAnyBranch),
