@@ -74,9 +74,9 @@ export class CreateDocumentExtractionJobUseCase {
       throw new AppError("File exceeds the configured size limit.", 413, "FILE_TOO_LARGE");
     }
     const extension = path.extname(file.originalName).toLowerCase();
-    if (jobType === AiJobType.QUOTED_EXCEL_EXTRACTION && ![".xlsx", ".xls"].includes(extension)) {
+    if (jobType === AiJobType.QUOTED_EXCEL_EXTRACTION && ![".pdf", ".xlsx", ".xls"].includes(extension)) {
       throw new AppError(
-        "La cotizacion importada debe ser un archivo XLSX o XLS.",
+        "La cotizacion importada debe ser un archivo PDF, XLSX o XLS.",
         400,
         "QUOTED_EXCEL_FILE_REQUIRED",
       );

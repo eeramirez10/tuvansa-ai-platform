@@ -3,6 +3,21 @@ export interface PdfPositionedLineToken {
   x: number;
 }
 
+type CommercialCurrency = "MXN" | "USD";
+
+interface CommercialColumn {
+  x: number;
+  header: string;
+  currency: CommercialCurrency | null;
+}
+
+interface CommercialPricePair {
+  priceX: number;
+  totalX: number;
+  endX: number;
+  currency: CommercialCurrency;
+}
+
 export class PdfDigitalReconciliationService {
   private readonly unitTokens: Set<string>;
   private readonly noisePatterns: RegExp[];
@@ -105,6 +120,11 @@ export class PdfDigitalReconciliationService {
     positionedLines: PdfPositionedLineToken[][] = [],
   ): string {
     const lines = this.toLines(pageText);
+    const commercialRows = this.extractCommercialQuoteRows(positionedLines);
+    if (commercialRows.length > 0) {
+      return `${lines.join("\n")}\n\nEXTRACTION_HINTS\nQUOTED_COMMERCIAL_ROWS\n${commercialRows.join("\n")}`.trim();
+    }
+
     const tableRows = this.extractStructuredTableRows(positionedLines);
     if (tableRows.length > 0) {
       return `${lines.join("\n")}\n\nEXTRACTION_HINTS\nSTRUCTURED_TABLE_ROWS\n${tableRows.join("\n")}`.trim();
@@ -119,6 +139,146 @@ export class PdfDigitalReconciliationService {
     }
 
     return `${lines.join("\n")}\n\nEXTRACTION_HINTS\n${structuredLines.join("\n")}`.trim();
+  }
+
+  private extractCommercialQuoteRows(lines: PdfPositionedLineToken[][]): string[] {
+    const headerIndex = lines.findIndex((line) => this.isCommercialQuoteHeader(line));
+    if (headerIndex < 0) return [];
+
+    const header = [...lines[headerIndex]!].sort((a, b) => a.x - b.x);
+    const part = header.find((token) => /^(PART|PARTIDA|ITEM)$/.test(this.normalizeHeader(token.text)));
+    const unit = header.find((token) => /^(UM|U M|UNIDAD)$/.test(this.normalizeHeader(token.text)));
+    const quantity = header.find((token) => /^(CANT|CANTIDAD)$/.test(this.normalizeHeader(token.text)));
+    const description = header.find((token) => this.normalizeHeader(token.text).includes("DESCRIPCION"));
+    const delivery = header.find((token) => /^(T E|TIEMPO ENTREGA|ENTREGA)$/.test(this.normalizeHeader(token.text)));
+    if (!part || !unit || !quantity || !description) return [];
+
+    const priceColumns = header
+      .map((token) => this.commercialColumn(token))
+      .filter((column): column is CommercialColumn => column !== null && /^(PRECIO|P UNITARIO|PRECIO UNITARIO)/.test(column.header));
+    const totalColumns = header
+      .map((token) => this.commercialColumn(token))
+      .filter((column): column is CommercialColumn => column !== null && /^(TOTAL|IMPORTE)/.test(column.header));
+    const lastTotalX = Math.max(...totalColumns.map((column) => column.x));
+    const deliveryStartX = delivery && Number.isFinite(lastTotalX)
+      ? lastTotalX + ((delivery.x - lastTotalX) * 0.7)
+      : Number.POSITIVE_INFINITY;
+    const pricePairs = this.buildCommercialPricePairs(priceColumns, totalColumns, deliveryStartX);
+    if (pricePairs.length === 0) return [];
+
+    const descriptionStartX = quantity.x + ((description.x - quantity.x) * 0.35);
+    const firstPriceX = Math.min(...pricePairs.map((pair) => pair.priceX));
+    const anchors: Array<{ lineIndex: number; unit: string; quantity: string }> = [];
+
+    for (let lineIndex = headerIndex + 1; lineIndex < lines.length; lineIndex += 1) {
+      const line = lines[lineIndex]!;
+      if (this.isCommercialSummaryLine(line)) break;
+      const partValue = this.valueInColumn(line, part.x, unit.x);
+      const unitValue = this.valueInColumn(line, unit.x, quantity.x);
+      const quantityValue = this.valueInColumn(line, quantity.x, descriptionStartX);
+      if (!/^\d+$/.test(partValue.trim()) || !unitValue || !this.isNumeric(quantityValue)) continue;
+      anchors.push({ lineIndex, unit: unitValue, quantity: quantityValue });
+    }
+    if (anchors.length === 0) return [];
+
+    const summaryIndex = lines.findIndex((line, index) => index > anchors[anchors.length - 1]!.lineIndex && this.isCommercialSummaryLine(line));
+    return anchors.map((anchor, index) => {
+      const previousAnchor = anchors[index - 1];
+      const nextAnchor = anchors[index + 1];
+      const startLine = previousAnchor
+        ? Math.floor((previousAnchor.lineIndex + anchor.lineIndex) / 2) + 1
+        : headerIndex + 1;
+      const endLine = nextAnchor
+        ? Math.floor((anchor.lineIndex + nextAnchor.lineIndex) / 2)
+        : (summaryIndex >= 0 ? summaryIndex - 1 : anchor.lineIndex);
+      const descriptionValue = lines
+        .slice(startLine, endLine + 1)
+        .map((line) => line
+          .filter((token) => token.x >= descriptionStartX && token.x < firstPriceX - 2)
+          .sort((a, b) => a.x - b.x)
+          .map((token) => token.text)
+          .join(" "))
+        .filter(Boolean)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const anchorLine = lines[anchor.lineIndex]!;
+      const candidates = pricePairs.map((pair) => ({
+        currency: pair.currency,
+        unitPrice: this.parseCommercialAmount(this.valueInColumn(anchorLine, pair.priceX, pair.totalX)),
+        subtotal: this.parseCommercialAmount(this.valueInColumn(anchorLine, pair.totalX, pair.endX)),
+      }));
+      const completeCandidates = candidates.filter((candidate) => candidate.unitPrice !== null && candidate.subtotal !== null);
+      const selected = completeCandidates.length === 1
+        ? completeCandidates[0]!
+        : candidates.filter((candidate) => candidate.unitPrice !== null).length === 1
+          ? candidates.find((candidate) => candidate.unitPrice !== null)!
+          : null;
+      const deliveryTime = delivery
+        ? this.valueInColumn(anchorLine, deliveryStartX, Number.POSITIVE_INFINITY)
+        : "";
+      const parts = [
+        descriptionValue ? `DESCRIPTION=${descriptionValue}` : null,
+        `UNIT=${anchor.unit}`,
+        `QUANTITY=${anchor.quantity}`,
+        selected?.unitPrice !== null && selected?.unitPrice !== undefined ? `UNIT_PRICE=${selected.unitPrice}` : null,
+        selected?.subtotal !== null && selected?.subtotal !== undefined ? `SUBTOTAL=${selected.subtotal}` : null,
+        selected ? `CURRENCY=${selected.currency}` : null,
+        deliveryTime ? `DELIVERY_TIME=${deliveryTime}` : null,
+      ];
+      return `ROW_${index + 1}: ${parts.filter(Boolean).join(" | ")}`;
+    }).slice(0, 200);
+  }
+
+  private isCommercialQuoteHeader(line: PdfPositionedLineToken[]): boolean {
+    const headers = line.map((token) => this.normalizeHeader(token.text));
+    return headers.some((header) => header.includes("DESCRIPCION")) &&
+      headers.some((header) => /^(UM|U M|UNIDAD)$/.test(header)) &&
+      headers.some((header) => /^(CANT|CANTIDAD)$/.test(header)) &&
+      headers.some((header) => /^(PRECIO|P UNITARIO|PRECIO UNITARIO)/.test(header)) &&
+      headers.some((header) => /^(TOTAL|IMPORTE)/.test(header));
+  }
+
+  private commercialColumn(token: PdfPositionedLineToken): CommercialColumn | null {
+    const header = this.normalizeHeader(token.text);
+    if (!/^(PRECIO|P UNITARIO|PRECIO UNITARIO|TOTAL|IMPORTE)/.test(header)) return null;
+    return { x: token.x, header, currency: this.currencyFromCommercialHeader(header) };
+  }
+
+  private currencyFromCommercialHeader(header: string): CommercialCurrency | null {
+    if (/\b(USD|US D|US|DLS|DLLS|DOLAR|DOLARES)\b/.test(header)) return "USD";
+    if (/\b(MXN|MNX|M N|MN|PESO|PESOS)\b/.test(header)) return "MXN";
+    return null;
+  }
+
+  private buildCommercialPricePairs(
+    prices: CommercialColumn[],
+    totals: CommercialColumn[],
+    tableEndX: number,
+  ): CommercialPricePair[] {
+    const orderedPrices = [...prices].sort((a, b) => a.x - b.x);
+    const orderedTotals = [...totals].sort((a, b) => a.x - b.x);
+    return orderedPrices.flatMap((price, index) => {
+      const nextPriceX = orderedPrices[index + 1]?.x ?? tableEndX;
+      const total = orderedTotals.find((candidate) => candidate.x > price.x && candidate.x < nextPriceX);
+      const currency = price.currency ?? total?.currency ?? null;
+      if (!total || !currency) return [];
+      return [{ priceX: price.x, totalX: total.x, endX: nextPriceX, currency }];
+    });
+  }
+
+  private isCommercialSummaryLine(line: PdfPositionedLineToken[]): boolean {
+    return line.some((token) => /^(SUBTOTAL|IVA|TOTAL USD|TOTAL MXN|TOTAL MNX)$/.test(this.normalizeHeader(token.text)));
+  }
+
+  private parseCommercialAmount(value: string): number | null {
+    const normalized = value
+      .replace(/[$,\s]/g, "")
+      .replace(/^\((.+)\)$/, "-$1")
+      .trim();
+    if (!/^-?\d+(?:\.\d+)?$/.test(normalized)) return null;
+    const amount = Number(normalized);
+    return Number.isFinite(amount) && amount > 0 ? amount : null;
   }
 
   private extractStructuredTableRows(lines: PdfPositionedLineToken[][]): string[] {

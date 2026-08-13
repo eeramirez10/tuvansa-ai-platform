@@ -76,7 +76,7 @@ export function loadApiConfig(): ApiConfig {
     jobAttempts: get("JOB_ATTEMPTS").default("3").asIntPositive(),
     jobBackoffMs: get("JOB_BACKOFF_MS").default("2000").asIntPositive(),
     promptVersion: get("QUOTE_EXTRACTION_PROMPT_VERSION").default("quote-items-v4").asString(),
-    quotedExcelPromptVersion: get("QUOTED_EXCEL_PROMPT_VERSION").default("quoted-excel-v2").asString(),
+    quotedExcelPromptVersion: get("QUOTED_EXCEL_PROMPT_VERSION").default("quoted-excel-v5").asString(),
     supplierQuotePromptVersion: get("SUPPLIER_QUOTE_PROMPT_VERSION").default("supplier-quote-v6").asString(),
     maxUploadBytes: get("MAX_UPLOAD_BYTES").default("15728640").asIntPositive(),
     structuredAiPromptVersion: get("STRUCTURED_AI_PROMPT_VERSION").default("structured-ai-v2").asString(),

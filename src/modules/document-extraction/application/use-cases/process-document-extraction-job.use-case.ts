@@ -90,7 +90,7 @@ export class ProcessDocumentExtractionJobUseCase {
       return {
         result: {
           file_name: input.fileName,
-          file_type: "xlsx",
+          file_type: fileType,
           import_type: "quoted_excel",
           items_count: extraction.items.length,
           items: extraction.items.map((item) => item.toPrimitives()),

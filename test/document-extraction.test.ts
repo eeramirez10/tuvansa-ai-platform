@@ -16,6 +16,7 @@ import {
 import { PdfOcrTextReaderPort } from "../src/modules/document-extraction/application/ports/pdf-ocr-text-reader.port";
 import { AiJob, AiJobStatus, AiJobType } from "../src/modules/job-management/domain/ai-job.entity";
 import { AppError } from "../src/shared/domain/app-error";
+import { parseQuotedCommercialRowHints } from "../src/modules/document-extraction/infrastructure/normalization/quoted-commercial-row-hints";
 import {
   AiJobRepository,
   AiRunInput,
@@ -25,7 +26,7 @@ import {
 
 const PROMPT_VERSIONS = {
   quoteDocument: "quote-items-v1",
-  quotedExcel: "quoted-excel-v2",
+  quotedExcel: "quoted-excel-v5",
   supplierQuote: "supplier-quote-v4",
 };
 
@@ -186,6 +187,52 @@ test("omits empty technical cells and accepts Metro as a structured table unit",
   assert.match(result, /UNIT=Metro \| QUANTITY=188/);
 });
 
+test("preserves mixed currencies from positioned seller quote columns", () => {
+  const reconciler = new PdfDigitalReconciliationService();
+  const header = [
+    { text: "PART", x: 52 },
+    { text: "UM", x: 104 },
+    { text: "CANT", x: 130 },
+    { text: "DESCRIPCIÓN", x: 223 },
+    { text: "PRECIO USD", x: 323 },
+    { text: "TOTAL USD", x: 368 },
+    { text: "PRECIO MNX", x: 412 },
+    { text: "TOTAL MNX", x: 460 },
+    { text: "T.E", x: 517 },
+  ];
+  const usdDescription = [{ text: "BOMBA CONTRA INCENDIO", x: 180 }];
+  const usdRow = [
+    { text: "1", x: 69 }, { text: "PZ", x: 106 }, { text: "1.00", x: 142 },
+    { text: "$", x: 325 }, { text: "18,118.07", x: 334 },
+    { text: "$", x: 369 }, { text: "18,118.07", x: 378 },
+    { text: "1 SEMANA", x: 510 },
+  ];
+  const mxnRow = [
+    { text: "2", x: 69 }, { text: "TMO", x: 103 }, { text: "4.00", x: 142 },
+    { text: "TUBERIA ACERO AL CARBON", x: 173 },
+    { text: "$", x: 412 }, { text: "1,890.23", x: 429 },
+    { text: "$", x: 460 }, { text: "7,560.92", x: 475 },
+    { text: "1 SEMANA", x: 510 },
+  ];
+  const summary = [{ text: "SUBTOTAL", x: 308 }];
+
+  const result = reconciler.reconcilePage("seller quote", [header, usdDescription, usdRow, mxnRow, summary]);
+
+  assert.match(result, /QUOTED_COMMERCIAL_ROWS/);
+  assert.match(result, /ROW_1: DESCRIPTION=BOMBA CONTRA INCENDIO .*UNIT_PRICE=18118\.07 .*CURRENCY=USD/);
+  assert.match(result, /ROW_2: DESCRIPTION=TUBERIA ACERO AL CARBON .*UNIT_PRICE=1890\.23 .*CURRENCY=MXN/);
+
+  assert.deepEqual(parseQuotedCommercialRowHints(result).map((row) => ({
+    currency: row.currency,
+    unitPrice: row.unitPrice,
+    subtotal: row.subtotal,
+    deliveryTime: row.deliveryTime,
+  })), [
+    { currency: "USD", unitPrice: 18118.07, subtotal: 18118.07, deliveryTime: "1 SEMANA" },
+    { currency: "MXN", unitPrice: 1890.23, subtotal: 7560.92, deliveryTime: "1 SEMANA" },
+  ]);
+});
+
 test("creates one document job and removes only the duplicate upload", async () => {
   const repository = new FakeRepository();
   const queue = new FakeQueue();
@@ -212,7 +259,32 @@ test("creates one document job and removes only the duplicate upload", async () 
   assert.deepEqual(storage.removed, ["/tmp/file-2-quote.xlsx"]);
 });
 
-test("rejects non-Excel files for quoted Excel jobs before storing them", async () => {
+test("accepts PDF files for seller quote jobs", async () => {
+  const repository = new FakeRepository();
+  const queue = new FakeQueue();
+  const storage = new FakeStorage();
+  const useCase = new CreateDocumentExtractionJobUseCase(
+    repository,
+    queue,
+    storage,
+    PROMPT_VERSIONS,
+    1024,
+  );
+
+  const result = await useCase.execute({
+    buffer: Buffer.from("%PDF seller quote"),
+    originalName: "quote.pdf",
+    mimeType: "application/pdf",
+  }, AiJobType.QUOTED_EXCEL_EXTRACTION);
+
+  assert.equal(result.created, true);
+  assert.equal(queue.messages.length, 1);
+  assert.equal(repository.inputs[0]?.input.fileName, "quote.pdf");
+  assert.equal(repository.inputs[0]?.promptVersion, "quoted-excel-v5");
+  assert.deepEqual(storage.removed, []);
+});
+
+test("rejects unsupported seller quote files before storing them", async () => {
   const storage = new FakeStorage();
   const useCase = new CreateDocumentExtractionJobUseCase(
     new FakeRepository(),
@@ -224,9 +296,9 @@ test("rejects non-Excel files for quoted Excel jobs before storing them", async 
 
   await assert.rejects(
     () => useCase.execute({
-      buffer: Buffer.from("pdf"),
-      originalName: "quote.pdf",
-      mimeType: "application/pdf",
+      buffer: Buffer.from("document"),
+      originalName: "quote.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     }, AiJobType.QUOTED_EXCEL_EXTRACTION),
     (error: unknown) => error instanceof AppError && error.code === "QUOTED_EXCEL_FILE_REQUIRED",
   );
