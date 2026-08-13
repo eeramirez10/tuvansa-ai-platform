@@ -7,9 +7,10 @@ export class OpenAiPdfOcrTextReaderAdapter extends PdfOcrTextReaderPort {
   constructor(
     apiKey: string,
     private readonly model: string,
+    client?: OpenAI,
   ) {
     super();
-    this.client = new OpenAI({ apiKey });
+    this.client = client ?? new OpenAI({ apiKey });
   }
 
   public async read(buffer: Buffer): Promise<string> {
@@ -24,7 +25,7 @@ export class OpenAiPdfOcrTextReaderAdapter extends PdfOcrTextReaderPort {
             {
               type: "input_file",
               filename: "quote.pdf",
-              file_data: buffer.toString("base64"),
+              file_data: this.toPdfDataUrl(buffer),
             },
           ],
         },
@@ -32,6 +33,11 @@ export class OpenAiPdfOcrTextReaderAdapter extends PdfOcrTextReaderPort {
     });
 
     return response.output_text?.trim() ?? "";
+  }
+
+  private toPdfDataUrl(buffer: Buffer): string {
+    if (buffer.length === 0) throw new Error("No se puede procesar un PDF vacio mediante OCR.");
+    return `data:application/pdf;base64,${buffer.toString("base64")}`;
   }
 
   private prompt(): string {
