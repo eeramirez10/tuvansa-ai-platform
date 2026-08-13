@@ -3,6 +3,7 @@ export const ERP_MEASUREMENT_UNITS = [
   "PZ",
   "K",
   "M",
+  "ML",
   "L",
   "TR",
   "SE",

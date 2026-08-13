@@ -6,7 +6,10 @@ import { DocumentTextExtractorPort } from "../src/modules/document-extraction/ap
 import { QuoteTextExtractorPort } from "../src/modules/document-extraction/application/ports/quote-text-extractor.port";
 import { QuotedExcelExtractorPort } from "../src/modules/document-extraction/application/ports/quoted-excel-extractor.port";
 import { SupplierQuoteExtractorPort } from "../src/modules/document-extraction/application/ports/supplier-quote-extractor.port";
-import { QuotedExcelItem } from "../src/modules/document-extraction/domain/quoted-excel-item.entity";
+import {
+  getQuotedExcelReviewReasons,
+  QuotedExcelItem,
+} from "../src/modules/document-extraction/domain/quoted-excel-item.entity";
 import { UnitNormalizerService } from "../src/modules/document-extraction/infrastructure/normalization/unit-normalizer.service";
 import { AiJobRepository, AiRunInput, CreateAiJobInput, CreateAiJobResult } from "../src/modules/job-management/application/ports/ai-job.repository";
 import { AiJob, AiJobStatus, AiJobType } from "../src/modules/job-management/domain/ai-job.entity";
@@ -75,7 +78,8 @@ function job(type: AiJobType): AiJob {
 test("normalizes legacy unit abbreviations used by sales files", () => {
   const normalizer = new UnitNormalizerService();
   const cases = [
-    ["PZAS", "PZ"], ["KILOS", "K"], ["MTS", "M"], ["LITROS", "L"],
+    ["PZAS", "PZ"], ["KILOS", "K"], ["MTS", "M"], ["ML", "ML"],
+    ["M.L.", "ML"], ["METROS LINEALES", "ML"], ["LITROS", "L"],
     ["TMO", "TR"], ["SERVICIO", "SE"], ["ACTIVIDAD", "ACT"], ["PIES", "FT"],
     ["ROLLOS", "XRO"], ["UNIDAD", "UNO"], ["M²", "M2"], ["LOTE", "LOT"],
     ["CONJUNTO", "CON"],
@@ -85,6 +89,24 @@ test("normalizes legacy unit abbreviations used by sales files", () => {
   assert.equal(normalizer.detectFromDescription("TUBO ASTM A312 4 M DE LARGO"), "M");
   assert.equal(normalizer.detectFromDescription("PISO DE 10 METROS CUADRADOS"), "M2");
   assert.equal(normalizer.normalize("CAJA"), null);
+});
+
+test("explains every deterministic review issue in a quoted Excel row", () => {
+  assert.deepEqual(getQuotedExcelReviewReasons({
+    description: "TUBO ACERO AL CARBON",
+    quantity: 2,
+    originalUnit: "CAJA",
+    normalizedUnit: null,
+    unitPrice: 100,
+    subtotal: 150,
+    currency: null,
+    deliveryTime: null,
+  }), [
+    "UNRECOGNIZED_UNIT",
+    "MISSING_CURRENCY",
+    "MISSING_DELIVERY_TIME",
+    "SUBTOTAL_MISMATCH",
+  ]);
 });
 
 test("processes quoted Excel with the current frontend response contract", async () => {
@@ -97,7 +119,7 @@ test("processes quoted Excel with the current frontend response contract", async
         descriptionOriginal: "Valvula compuerta 2 pulgadas",
         descriptionNormalized: "Valvula compuerta 2 pulgadas",
         quantity: 2,
-        unit: "PZA",
+        unit: "PZ",
         unitPrice: 100,
         subtotal: 200,
         currency: "MXN",
@@ -126,12 +148,13 @@ test("processes quoted Excel with the current frontend response contract", async
       description_original: "Valvula compuerta 2 pulgadas",
       description_normalizada: "VALVULA COMPUERTA 2 PULGADAS",
       cantidad: 2,
-      unidad: "PZA",
+      unidad: "PZ",
       precio_vendedor: 100,
       subtotal: 200,
       moneda: "MXN",
       tiempo_entrega: "Inmediato",
       requiere_revision: false,
+      motivos_revision: [],
     }],
   });
   assert.deepEqual(storage.removed, ["/tmp/quote.xlsx"]);

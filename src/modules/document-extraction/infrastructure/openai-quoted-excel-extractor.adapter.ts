@@ -1,9 +1,15 @@
 import OpenAI from "openai";
 import { QuotedExcelExtractorPort } from "../application/ports/quoted-excel-extractor.port";
-import { QuoteCurrency, QuotedExcelItem } from "../domain/quoted-excel-item.entity";
+import {
+  QuoteCurrency,
+  getQuotedExcelReviewReasons,
+  QuotedExcelItem,
+} from "../domain/quoted-excel-item.entity";
+import { UnitNormalizerService } from "./normalization/unit-normalizer.service";
 
 export class OpenAiQuotedExcelExtractorAdapter implements QuotedExcelExtractorPort {
   private readonly client: OpenAI;
+  private readonly unitNormalizer = new UnitNormalizerService();
 
   constructor(apiKey: string, private readonly model: string) {
     this.client = new OpenAI({ apiKey });
@@ -99,14 +105,21 @@ export class OpenAiQuotedExcelExtractorAdapter implements QuotedExcelExtractorPo
         ? this.round4(quantity * unitPrice)
         : null;
       const subtotal = sourceSubtotal ?? calculatedSubtotal;
-      const subtotalMismatch = sourceSubtotal !== null && calculatedSubtotal !== null &&
-        Math.abs(sourceSubtotal - calculatedSubtotal) > Math.max(0.05, calculatedSubtotal * 0.001);
-      const unit = this.text(raw.unidad) || null;
+      const originalUnit = this.text(raw.unidad) || null;
+      const normalizedUnit = this.unitNormalizer.normalize(originalUnit);
+      const unit = normalizedUnit ?? originalUnit;
       const currency = this.currency(raw.moneda);
       const deliveryTime = this.text(raw.tiempo_entrega) || null;
-      const requiresReview = raw.requiere_revision === true ||
-        quantity === null || quantity <= 0 || !unit || unitPrice === null || unitPrice <= 0 ||
-        subtotal === null || subtotal <= 0 || !currency || !deliveryTime || subtotalMismatch;
+      const reviewReasons = getQuotedExcelReviewReasons({
+        description: descriptionNormalized,
+        quantity,
+        originalUnit,
+        normalizedUnit,
+        unitPrice,
+        subtotal,
+        currency,
+        deliveryTime,
+      });
 
       return [new QuotedExcelItem({
         descriptionOriginal,
@@ -117,7 +130,8 @@ export class OpenAiQuotedExcelExtractorAdapter implements QuotedExcelExtractorPo
         subtotal,
         currency,
         deliveryTime,
-        requiresReview,
+        requiresReview: reviewReasons.length > 0,
+        reviewReasons,
       })];
     });
   }
@@ -147,6 +161,7 @@ export class OpenAiQuotedExcelExtractorAdapter implements QuotedExcelExtractorPo
       "description_normalizada debe estar limpia y en mayusculas.",
       "precio_vendedor es el precio unitario y subtotal es el total de la fila.",
       "moneda corresponde a cada partida: dolares es USD y pesos/MXN/M.N. es MXN.",
+      "Normaliza la unidad cuando sea evidente usando PZ, K, M, ML, L, TR, SE, ACT, FT, XRO, UNO, M2, LOT o CON; ML significa metro lineal.",
       "No inventes valores y marca requiere_revision si falta cualquier dato comercial o el subtotal no corresponde.",
     ].join("\n");
   }

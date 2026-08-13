@@ -282,7 +282,7 @@ export class OpenAiQuoteTextExtractorAdapter implements QuoteTextExtractorPort {
       "In customer, extract the company or person requesting the quotation only when explicitly identifiable; never return TUVANSA or the seller as customer.",
       "Separate customer contacts and address fields. Use null for customer when identity is not supported by the content.",
       "Do not invent quantity or unit.",
-      "unidad_normalizada must use only the ERP codes PZ, K, M, L, TR, SE, ACT, FT, XRO, UNO, M2, LOT or CON.",
+      "unidad_normalizada must use only the ERP codes PZ, K, M, ML, L, TR, SE, ACT, FT, XRO, UNO, M2, LOT or CON.",
       "Keep the source order.",
       "When EXTRACTION_HINTS are present, use them to reconcile each structured row with its description, technical attributes, quantity and unit.",
       "Use requiere_revision=true when quantity or normalized unit is missing."

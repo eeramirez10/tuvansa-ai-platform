@@ -211,7 +211,7 @@ export class OpenAiMissingProductsProcessor implements StructuredAiProcessorPort
       "Estandariza partidas faltantes del ERP para productos temporales locales.",
       "No inventes marca, modelo, medidas ni EAN.",
       "Mantener item_id exactamente igual y conservar el orden.",
-      "Unidades permitidas: PZ, K, M, L, TR, SE, ACT, FT, XRO, UNO, M2, LOT, CON o null.",
+      "Unidades permitidas: PZ, K, M, ML, L, TR, SE, ACT, FT, XRO, UNO, M2, LOT, CON o null.",
       "description_normalized debe ser limpia y apta para busqueda semantica.",
       "Si quantity o unit no son confiables usa null y requires_review=true.",
       "confidence debe estar entre 0 y 1.",

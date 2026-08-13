@@ -7,7 +7,9 @@ export class UnitNormalizerService {
     ["k", "K"], ["kg", "K"], ["kgs", "K"], ["kilo", "K"], ["kilos", "K"],
     ["kilogramo", "K"], ["kilogramos", "K"], ["kilogram", "K"], ["kilograms", "K"],
     ["m", "M"], ["mt", "M"], ["mts", "M"], ["mtr", "M"], ["mtrs", "M"],
-    ["metro", "M"], ["metros", "M"], ["metro lineal", "M"], ["metros lineales", "M"],
+    ["metro", "M"], ["metros", "M"],
+    ["ml", "ML"], ["m l", "ML"], ["mtl", "ML"], ["mtls", "ML"],
+    ["metro lineal", "ML"], ["metros lineales", "ML"],
     ["l", "L"], ["lt", "L"], ["lts", "L"], ["ltr", "L"], ["litro", "L"], ["litros", "L"],
     ["tr", "TR"], ["tmo", "TR"], ["tmos", "TR"], ["tramo", "TR"], ["tramos", "TR"],
     ["se", "SE"], ["serv", "SE"], ["servicio", "SE"], ["servicios", "SE"], ["service", "SE"],
@@ -34,7 +36,7 @@ export class UnitNormalizerService {
     const cleaned = this.clean(description);
     const explicitWords = [
       "pieza", "piezas", "pza", "pzas", "kilo", "kilos", "kilogramo", "kilogramos",
-      "metro", "metros", "litro", "litros", "tramo", "tramos", "tmo", "tmos",
+      "metro lineal", "metros lineales", "metro", "metros", "litro", "litros", "tramo", "tramos", "tmo", "tmos",
       "servicio", "servicios", "actividad", "actividades", "pie", "pies", "rollo", "rollos",
       "unidad", "unidades", "metro cuadrado", "metros cuadrados", "lote", "lotes",
       "conjunto", "conjuntos", "juego", "juegos",
@@ -46,7 +48,7 @@ export class UnitNormalizerService {
     }
 
     const quantityAndUnit = cleaned.match(
-      /(?:^|\s)\d+(?:[.,]\d+)?\s*(pz(?:as?)?|pcs?|kg?s?|k|m(?:ts?|trs?)?|l(?:ts?|tr)?|tr|ft?s?|xro|uno|m2|lot|con|se|act)(?:$|\s)/,
+      /(?:^|\s)\d+(?:[.,]\d+)?\s*(pz(?:as?)?|pcs?|kg?s?|k|ml|m(?:ts?|trs?)?|l(?:ts?|tr)?|tr|ft?s?|xro|uno|m2|lot|con|se|act)(?:$|\s)/,
     );
     if (quantityAndUnit?.[1]) {
       return this.normalize(quantityAndUnit[1]);

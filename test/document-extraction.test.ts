@@ -25,7 +25,7 @@ import {
 
 const PROMPT_VERSIONS = {
   quoteDocument: "quote-items-v1",
-  quotedExcel: "quoted-excel-v1",
+  quotedExcel: "quoted-excel-v2",
   supplierQuote: "supplier-quote-v4",
 };
 
