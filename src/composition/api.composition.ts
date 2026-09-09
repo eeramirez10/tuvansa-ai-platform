@@ -24,6 +24,10 @@ import { CatalogMaintenanceRoutes } from "../modules/semantic-catalog/presentati
 import { CreateCatalogSearchEvaluationJobUseCase } from "../modules/semantic-catalog/application/use-cases/create-catalog-search-evaluation-job.use-case";
 import { CatalogSearchEvaluationController } from "../modules/semantic-catalog/presentation/catalog-search-evaluation.controller";
 import { CatalogSearchEvaluationRoutes } from "../modules/semantic-catalog/presentation/catalog-search-evaluation.routes";
+import { CoreCustomerAssistantToolGateway } from "../modules/customer-whatsapp-assistant/infrastructure/core-customer-assistant-tool.gateway";
+import { OpenAiCustomerWhatsAppAssistant } from "../modules/customer-whatsapp-assistant/infrastructure/openai-customer-whatsapp-assistant";
+import { CustomerWhatsAppAssistantController } from "../modules/customer-whatsapp-assistant/presentation/customer-whatsapp-assistant.controller";
+import { CustomerWhatsAppAssistantRoutes } from "../modules/customer-whatsapp-assistant/presentation/customer-whatsapp-assistant.routes";
 
 export interface ApiRuntime {
   app: Express;
@@ -89,6 +93,19 @@ export function composeApi(config: ApiConfig): ApiRuntime {
       new CreateCatalogSearchEvaluationJobUseCase(repository, queue, "catalog-evaluation-v1"),
     ),
   );
+  const customerAssistantRoutes = new CustomerWhatsAppAssistantRoutes(
+    new CustomerWhatsAppAssistantController(
+      new OpenAiCustomerWhatsAppAssistant(
+        config.openAiApiKey,
+        config.openAiModel,
+        new CoreCustomerAssistantToolGateway(
+          config.coreBackendBaseUrl,
+          config.coreBackendAssistantApiKey,
+        ),
+        config.customerAssistantMaxToolRounds,
+      ),
+    ),
+  );
 
   const app = express();
   app.disable("x-powered-by");
@@ -127,6 +144,7 @@ export function composeApi(config: ApiConfig): ApiRuntime {
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), assistanceRoutes.buildCompatibility());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), catalogMaintenanceRoutes.build());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), catalogEvaluationRoutes.build());
+  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), customerAssistantRoutes.build());
   app.use(errorHandler);
 
   return {

@@ -32,6 +32,11 @@ export interface ApiConfig extends BaseConfig {
   erpProductsTimeoutMs: number;
   erpProductsApiKey?: string;
   localProductsInternalApiKey: string;
+  openAiApiKey: string;
+  openAiModel: string;
+  coreBackendBaseUrl: string;
+  coreBackendAssistantApiKey: string;
+  customerAssistantMaxToolRounds: number;
 }
 
 export interface WorkerConfig extends BaseConfig {
@@ -104,6 +109,13 @@ export function loadApiConfig(): ApiConfig {
     localProductsInternalApiKey: get("LOCAL_PRODUCTS_INTERNAL_API_KEY")
       .default(baseConfig.internalApiKey)
       .asString(),
+    openAiApiKey: get("OPENAI_API_KEY").required().asString(),
+    openAiModel: get("OPENAI_MODEL").default("gpt-5-nano").asString(),
+    coreBackendBaseUrl: get("CORE_BACKEND_BASE_URL").default("http://localhost:4600").asString(),
+    coreBackendAssistantApiKey: get("CORE_BACKEND_ASSISTANT_API_KEY")
+      .default(baseConfig.internalApiKey)
+      .asString(),
+    customerAssistantMaxToolRounds: get("CUSTOMER_ASSISTANT_MAX_TOOL_ROUNDS").default("8").asIntPositive(),
   };
 }
 
