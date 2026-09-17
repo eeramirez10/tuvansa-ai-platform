@@ -42,10 +42,14 @@ test("uses Responses API function tools before answering with quote data", async
   const result = await assistant.respond({
     turnId: "turn-1",
     conversationId: "conversation-1",
-    participantPhone: "+525511223344",
     message: "¿Cómo van las propuestas que me enviaron?",
     mediaCount: 0,
     previousResponseId: null,
+    principal: {
+      audience: "CUSTOMER",
+      isVerified: false,
+      capabilities: ["CUSTOMER_QUOTES", "CUSTOMER_QUOTE_ACTIONS"],
+    },
   });
 
   assert.equal(result.responseId, "resp-2");
@@ -78,13 +82,127 @@ test("restarts context when OpenAI no longer has the previous response", async (
   const result = await assistant.respond({
     turnId: "turn-2",
     conversationId: "conversation-1",
-    participantPhone: "+525511223344",
     message: "¿Cómo va mi cotización?",
     mediaCount: 0,
     previousResponseId: "resp-expired",
+    principal: {
+      audience: "CUSTOMER",
+      isVerified: false,
+      capabilities: ["CUSTOMER_QUOTES", "CUSTOMER_QUOTE_ACTIONS"],
+    },
   });
 
   assert.equal(result.responseId, "resp-new");
   assert.equal(createInputs[0].previous_response_id, "resp-expired");
   assert.equal(createInputs[1].previous_response_id, undefined);
+});
+
+test("acknowledges inbound files by name without claiming they cannot be read", async () => {
+  const createInputs: Record<string, unknown>[] = [];
+  const client = {
+    responses: {
+      create: async (input: Record<string, unknown>) => {
+        createInputs.push(input);
+        return { id: "resp-file", output_text: "Recibí materiales.xlsx. ¿Quieres que lo usemos para preparar tu cotización?", output: [{ type: "message" }] };
+      },
+    },
+  };
+  const assistant = new OpenAiCustomerWhatsAppAssistant("test", "test-model", new ToolStub(), 4, client as never);
+
+  await assistant.respond({
+    turnId: "turn-file",
+    conversationId: "conversation-file",
+    message: "Te envío la lista",
+    mediaCount: 1,
+    attachments: [{ originalName: "materiales.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }],
+    previousResponseId: null,
+    principal: { audience: "UNKNOWN", isVerified: false, capabilities: ["LEAD_INTAKE"] },
+  });
+
+  const initialInput = createInputs[0].input as Array<{ content: string }>;
+  assert.match(initialInput[0].content, /materiales\.xlsx/);
+  assert.match(initialInput[0].content, /preparar una cotización/);
+  assert.doesNotMatch(initialInput[0].content, /lectura de archivos todavía no está habilitada/i);
+  assert.match(String(createInputs[0].instructions), /Nunca digas que no puedes recibir o leer archivos/);
+});
+
+test("unverified internal users only receive verification tools", async () => {
+  const createInputs: Record<string, unknown>[] = [];
+  const client = {
+    responses: {
+      create: async (input: Record<string, unknown>) => {
+        createInputs.push(input);
+        return { id: "resp-internal", output_text: "Verifica tu identidad.", output: [{ type: "message" }] };
+      },
+    },
+  };
+  const assistant = new OpenAiCustomerWhatsAppAssistant("test", "test-model", new ToolStub(), 4, client as never);
+
+  await assistant.respond({
+    turnId: "turn-internal",
+    conversationId: "conversation-internal",
+    message: "Dame el reporte de este mes",
+    mediaCount: 0,
+    previousResponseId: null,
+    principal: {
+      audience: "INTERNAL_USER",
+      isVerified: false,
+      capabilities: ["INTERNAL_VERIFICATION"],
+    },
+  });
+
+  const toolNames = (createInputs[0].tools as Array<{ name: string }>).map((tool) => tool.name);
+  assert.deepEqual(toolNames, ["request_internal_verification", "verify_internal_code"]);
+  assert.doesNotMatch(String(createInputs[0].instructions), /list_customer_quotes/);
+});
+
+test("unknown numbers receive no data tools", async () => {
+  const createInputs: Record<string, unknown>[] = [];
+  const client = {
+    responses: {
+      create: async (input: Record<string, unknown>) => {
+        createInputs.push(input);
+        return { id: "resp-unknown", output_text: "Comunícate con tu ejecutivo.", output: [{ type: "message" }] };
+      },
+    },
+  };
+  const assistant = new OpenAiCustomerWhatsAppAssistant("test", "test-model", new ToolStub(), 4, client as never);
+
+  await assistant.respond({
+    turnId: "turn-unknown",
+    conversationId: "conversation-unknown",
+    message: "Muéstrame cotizaciones",
+    mediaCount: 0,
+    previousResponseId: null,
+    principal: { audience: "UNKNOWN", isVerified: false, capabilities: [] },
+  });
+
+  assert.deepEqual(createInputs[0].tools, []);
+});
+
+test("unknown numbers with lead intake can save prospect data but cannot access quotes", async () => {
+  const createInputs: Record<string, unknown>[] = [];
+  const client = {
+    responses: {
+      create: async (input: Record<string, unknown>) => {
+        createInputs.push(input);
+        return { id: "resp-lead", output_text: "Registré tu solicitud.", output: [{ type: "message" }] };
+      },
+    },
+  };
+  const assistant = new OpenAiCustomerWhatsAppAssistant("test", "test-model", new ToolStub(), 4, client as never);
+
+  await assistant.respond({
+    turnId: "turn-lead",
+    conversationId: "conversation-lead",
+    message: "Soy Ana de Aceros del Centro y necesito 20 metros de tubería",
+    mediaCount: 0,
+    previousResponseId: null,
+    principal: { audience: "UNKNOWN", isVerified: false, capabilities: ["LEAD_INTAKE"] },
+  });
+
+  const toolNames = (createInputs[0].tools as Array<{ name: string }>).map((tool) => tool.name);
+  assert.deepEqual(toolNames, ["get_whatsapp_lead", "update_whatsapp_lead"]);
+  assert.ok(!toolNames.includes("list_customer_quotes"));
+  assert.match(String(createInputs[0].instructions), /Trátalo como un prospecto/);
 });
