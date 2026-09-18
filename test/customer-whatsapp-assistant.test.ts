@@ -205,4 +205,5 @@ test("unknown numbers with lead intake can save prospect data but cannot access 
   assert.deepEqual(toolNames, ["get_whatsapp_lead", "update_whatsapp_lead"]);
   assert.ok(!toolNames.includes("list_customer_quotes"));
   assert.match(String(createInputs[0].instructions), /Trátalo como un prospecto/);
+  assert.match(String(createInputs[0].instructions), /falta el correo, solicítalo explícitamente/);
 });
