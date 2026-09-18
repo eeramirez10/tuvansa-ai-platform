@@ -115,7 +115,10 @@ export class OpenAiCustomerWhatsAppAssistant {
         "Este número todavía no está registrado. Trátalo como un prospecto y ayúdalo a preparar su solicitud para canalizarla con ventas.",
         "Recopila gradualmente nombre, empresa si aplica, ciudad o estado, correo y un resumen concreto de los materiales o servicio requerido.",
         "No conviertas el diálogo en un cuestionario largo: reconoce los datos que ya compartió y pregunta solamente por lo que falte.",
-        "Cuando el mensaje aporte datos del prospecto, usa update_whatsapp_lead. Envía null en campos no mencionados; nunca inventes datos.",
+        "Cuando el mensaje aporte nombre, empresa, correo o ubicación del prospecto, usa update_whatsapp_lead. Envía null en campos no mencionados; nunca inventes datos.",
+        "La identidad del prospecto y su solicitud comercial son datos distintos. Nunca guardes materiales en los datos permanentes del prospecto.",
+        "Cuando exprese materiales o servicios a cotizar, consulta primero get_whatsapp_lead y usa upsert_whatsapp_quote_request.",
+        "Usa startNew=false para completar o corregir la solicitud activa. Usa startNew=true únicamente si no existe una solicitud activa o si el prospecto expresa claramente una necesidad nueva e independiente.",
         "El nombre y el resumen de la solicitud son los mínimos para dejarlo pendiente de asignación. Empresa, correo y ubicación son recomendables.",
         "Si ya conoces el nombre pero todavía falta el correo, solicítalo explícitamente antes de informar que la captura terminó, incluso si readyForAssignment=true.",
         "Cuando el prospecto comparta su correo, guárdalo con update_whatsapp_lead antes de responder. Si indica que no tiene o no desea compartirlo, no insistas ni bloquees la atención.",
@@ -159,11 +162,18 @@ export class OpenAiCustomerWhatsAppAssistant {
       "Nunca inventes cotizaciones, estados, fechas, importes, vendedores ni motivos. Para cualquier dato real debes usar una tool.",
       "Solo habla de cotizaciones autorizadas para este número. No reveles costos ERP, márgenes, notas internas ni datos de otros clientes.",
       "Si no está claro a cuál cotización se refiere, usa list_customer_quotes y pide al cliente que elija una.",
+      "Para preguntas sobre precio, cantidad o tiempo de entrega de una partida específica usa search_quote_items con su número de partida o una descripción concreta.",
+      "Nunca solicites todas las partidas ni todos los tiempos de entrega mediante search_quote_items. Si el cliente pide un listado completo, ofrece registrar una solicitud para su ejecutivo.",
+      "La información de partidas devuelta por las tools es la única autorizada para el cliente. Nunca infieras costos, márgenes, stock, proveedores ni datos internos.",
+      "Si el dato solicitado no existe o requiere confirmación humana, usa create_quote_information_request después de que el cliente acepte que se registre la solicitud.",
       "Traduce estados: QUOTED=cotizada y pendiente de respuesta; APPROVED=aceptada por el cliente; REJECTED=rechazada; SUPERSEDED=reemplazada por una revisión.",
       "Para aceptar, primero usa prepare_quote_acceptance y pide confirmación explícita con folio, total y moneda. Solo en un mensaje posterior inequívoco usa confirm_quote_acceptance.",
       "Para cancelar, explica que se registrará como rechazo del cliente. Consulta list_rejection_reasons, aclara el motivo, prepara el rechazo y pide confirmación antes de confirmarlo.",
       "Nunca uses confirm_quote_acceptance o confirm_quote_rejection sin una preparación pendiente creada en un turno anterior.",
       "Si solicita cambios, no alteres la cotización: usa create_quote_change_request con el texto completo e informa que su ejecutivo dará seguimiento.",
+      "Si solicita una cotización nueva o menciona materiales distintos sin referirse a un folio existente, consulta get_whatsapp_lead y usa upsert_whatsapp_quote_request.",
+      "Usa startNew=false para agregar o corregir la solicitud activa. Usa startNew=true solo si no hay solicitud activa o el cliente confirma que se trata de otra cotización independiente.",
+      "Preguntas de estado, aceptación, rechazo o cambios de una cotización existente no crean una solicitud nueva.",
       "No afirmes que una acción ocurrió hasta recibir success=true de la tool.",
     ].join("\n");
   }
@@ -187,10 +197,10 @@ export class OpenAiCustomerWhatsAppAssistant {
             companyName: nullableText,
             email: nullableText,
             location: nullableText,
-            requestSummary: nullableText,
           },
-          ["contactName", "companyName", "email", "location", "requestSummary"],
+          ["contactName", "companyName", "email", "location"],
         ),
+        ...this.quoteRequestTools(),
       ];
     }
     if (principal.capabilities.includes("INTERNAL_VERIFICATION")) {
@@ -220,8 +230,20 @@ export class OpenAiCustomerWhatsAppAssistant {
       ];
     }
     return [
+      ...(principal.capabilities.includes("QUOTE_REQUESTS") ? [this.tool(
+        "get_whatsapp_lead",
+        "Consulta la solicitud comercial activa y el contexto del cliente antes de decidir si debe actualizarse o iniciar otra.",
+        {},
+        [],
+      )] : []),
+      ...(principal.capabilities.includes("QUOTE_REQUESTS") ? this.quoteRequestTools() : []),
       this.tool("list_customer_quotes", "Lista cotizaciones enviadas por WhatsApp y autorizadas para este cliente.", { limit: { type: "integer", minimum: 1, maximum: 10 } }, ["limit"]),
       this.tool("get_quote_details", "Consulta datos públicos y estado actual de una cotización autorizada.", { quoteNumber: { type: "string" } }, ["quoteNumber"]),
+      this.tool("search_quote_items", "Busca como máximo cinco partidas públicas de una cotización por posición o descripción concreta. No se usa para listar toda la cotización.", {
+        quoteNumber: { type: "string" },
+        query: { type: ["string", "null"], minLength: 2, maxLength: 200 },
+        position: { type: ["integer", "null"], minimum: 1 },
+      }, ["quoteNumber", "query", "position"]),
       this.tool("list_rejection_reasons", "Obtiene motivos de rechazo disponibles para la cotización.", { quoteNumber: { type: "string" } }, ["quoteNumber"]),
       this.tool("prepare_quote_acceptance", "Prepara una aceptación y devuelve los datos que deben confirmarse.", { quoteNumber: { type: "string" } }, ["quoteNumber"]),
       this.tool("confirm_quote_acceptance", "Ejecuta una aceptación previamente preparada y confirmada expresamente.", { quoteNumber: { type: "string" } }, ["quoteNumber"]),
@@ -232,7 +254,30 @@ export class OpenAiCustomerWhatsAppAssistant {
       this.tool("create_quote_change_request", "Registra una solicitud de cambios sin modificar directamente la cotización.", {
         quoteNumber: { type: "string" }, requestedChanges: { type: "string", minLength: 3, maxLength: 2000 },
       }, ["quoteNumber", "requestedChanges"]),
+      this.tool("create_quote_information_request", "Registra una solicitud para que el ejecutivo confirme información que no está disponible en la cotización.", {
+        quoteNumber: { type: "string" }, requestedInformation: { type: "string", minLength: 3, maxLength: 2000 },
+      }, ["quoteNumber", "requestedInformation"]),
       this.tool("contact_sales_representative", "Obtiene el ejecutivo responsable para orientar al cliente.", { quoteNumber: { type: "string" } }, ["quoteNumber"]),
+    ];
+  }
+
+  private quoteRequestTools(): FunctionTool[] {
+    return [
+      this.tool(
+        "upsert_whatsapp_quote_request",
+        "Crea una solicitud comercial nueva o actualiza el resumen de la solicitud activa después de consultar get_whatsapp_lead.",
+        {
+          summary: { type: "string", minLength: 3, maxLength: 2000 },
+          startNew: { type: "boolean" },
+        },
+        ["summary", "startNew"],
+      ),
+      this.tool(
+        "close_whatsapp_quote_request",
+        "Cierra la solicitud activa cuando el cliente expresa que ya no desea continuar antes de generar una cotización.",
+        { cancelled: { type: "boolean" } },
+        ["cancelled"],
+      ),
     ];
   }
 

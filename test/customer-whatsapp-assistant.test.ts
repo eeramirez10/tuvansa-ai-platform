@@ -202,8 +202,47 @@ test("unknown numbers with lead intake can save prospect data but cannot access 
   });
 
   const toolNames = (createInputs[0].tools as Array<{ name: string }>).map((tool) => tool.name);
-  assert.deepEqual(toolNames, ["get_whatsapp_lead", "update_whatsapp_lead"]);
+  assert.deepEqual(toolNames, [
+    "get_whatsapp_lead",
+    "update_whatsapp_lead",
+    "upsert_whatsapp_quote_request",
+    "close_whatsapp_quote_request",
+  ]);
   assert.ok(!toolNames.includes("list_customer_quotes"));
   assert.match(String(createInputs[0].instructions), /Trátalo como un prospecto/);
   assert.match(String(createInputs[0].instructions), /falta el correo, solicítalo explícitamente/);
+});
+
+test("known customers receive quote request lifecycle tools", async () => {
+  const createInputs: Record<string, unknown>[] = [];
+  const client = {
+    responses: {
+      create: async (input: Record<string, unknown>) => {
+        createInputs.push(input);
+        return { id: "resp-request", output_text: "Registré tu nueva solicitud.", output: [{ type: "message" }] };
+      },
+    },
+  };
+  const assistant = new OpenAiCustomerWhatsAppAssistant("test", "test-model", new ToolStub(), 4, client as never);
+
+  await assistant.respond({
+    turnId: "turn-request",
+    conversationId: "conversation-customer",
+    message: "Ahora necesito cotizar válvulas de 4 pulgadas",
+    mediaCount: 0,
+    previousResponseId: null,
+    principal: {
+      audience: "CUSTOMER",
+      isVerified: false,
+      capabilities: ["CUSTOMER_QUOTES", "CUSTOMER_QUOTE_ACTIONS", "QUOTE_REQUESTS"],
+    },
+  });
+
+  const toolNames = (createInputs[0].tools as Array<{ name: string }>).map((tool) => tool.name);
+  assert.deepEqual(toolNames.slice(0, 3), [
+    "get_whatsapp_lead",
+    "upsert_whatsapp_quote_request",
+    "close_whatsapp_quote_request",
+  ]);
+  assert.match(String(createInputs[0].instructions), /otra cotización independiente/);
 });

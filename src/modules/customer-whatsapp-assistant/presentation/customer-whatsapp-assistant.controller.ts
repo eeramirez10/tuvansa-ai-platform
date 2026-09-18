@@ -61,6 +61,7 @@ export class CustomerWhatsAppAssistantController {
       "INTERNAL_REPORTS",
       "INTERNAL_QUOTES",
       "LEAD_INTAKE",
+      "QUOTE_REQUESTS",
     ]);
     const capabilities = Array.isArray(input.capabilities)
       ? input.capabilities.filter((item): item is WhatsAppAssistantPrincipal["capabilities"][number] => (
