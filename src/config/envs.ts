@@ -40,6 +40,8 @@ export interface ApiConfig extends BaseConfig {
   localProductsInternalApiKey: string;
   openAiApiKey: string;
   openAiModel: string;
+  openAiOcrModel: string;
+  pdfOcrEnabled: boolean;
   coreBackendBaseUrl: string;
   coreBackendAssistantApiKey: string;
   customerAssistantMaxToolRounds: number;
@@ -117,6 +119,8 @@ export function loadApiConfig(): ApiConfig {
       .asString(),
     openAiApiKey: get("OPENAI_API_KEY").required().asString(),
     openAiModel: get("OPENAI_MODEL").default("gpt-5-nano").asString(),
+    openAiOcrModel: get("OPENAI_OCR_MODEL").default("gpt-5.4").asString(),
+    pdfOcrEnabled: get("PDF_OCR_ENABLED").default("false").asBool(),
     coreBackendBaseUrl: get("CORE_BACKEND_BASE_URL").default("http://localhost:4600").asString(),
     coreBackendAssistantApiKey: get("CORE_BACKEND_ASSISTANT_API_KEY")
       .default(baseConfig.internalApiKey)

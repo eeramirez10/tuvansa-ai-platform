@@ -1,7 +1,7 @@
 export interface WhatsAppAssistantPrincipal {
   audience: "CUSTOMER" | "INTERNAL_USER" | "UNKNOWN";
   isVerified: boolean;
-  capabilities: Array<"CUSTOMER_QUOTES" | "CUSTOMER_QUOTE_ACTIONS" | "INTERNAL_VERIFICATION" | "INTERNAL_REPORTS" | "INTERNAL_QUOTES" | "LEAD_INTAKE" | "QUOTE_REQUESTS">;
+  capabilities: Array<"CUSTOMER_QUOTES" | "CUSTOMER_QUOTE_ACTIONS" | "CUSTOMER_ONBOARDING" | "INTERNAL_VERIFICATION" | "INTERNAL_REPORTS" | "INTERNAL_QUOTES" | "LEAD_INTAKE" | "QUOTE_REQUESTS">;
 }
 
 export interface CustomerAssistantRequest {
@@ -10,6 +10,7 @@ export interface CustomerAssistantRequest {
   message: string;
   mediaCount: number;
   attachments?: Array<{
+    id: string;
     originalName: string;
     mimeType: string;
   }>;

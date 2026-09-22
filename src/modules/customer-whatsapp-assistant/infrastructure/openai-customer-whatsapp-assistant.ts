@@ -82,14 +82,15 @@ export class OpenAiCustomerWhatsAppAssistant {
   }
 
   private userMessage(input: CustomerAssistantRequest): string {
-    const names = (input.attachments || []).map((attachment) => attachment.originalName);
+    const names = (input.attachments || []).map((attachment) => `${attachment.originalName} (id: ${attachment.id})`);
     const mediaNotice = input.mediaCount > 0
       ? [
           "",
           "[CONTEXTO SEGURO DEL SISTEMA SOBRE ADJUNTOS]",
           `Se recibieron ${input.mediaCount} archivo(s): ${names.length > 0 ? names.join(", ") : "nombre pendiente de sincronización"}.`,
-          "Confirma la recepción de los archivos por su nombre y pregunta si deben usarse para preparar una cotización.",
-          "No afirmes haber leído o extraído todavía su contenido; esa acción la inicia el vendedor desde el sistema.",
+          "Confirma la recepción de los archivos por su nombre. Determina su propósito con el contexto y las tools disponibles.",
+          "Pregunta si desea usar el archivo para preparar una cotización cuando corresponda.",
+          "No afirmes haber leído o extraído el contenido antes de que una tool confirme el procesamiento.",
           "[/CONTEXTO SEGURO DEL SISTEMA SOBRE ADJUNTOS]",
         ].join("\n")
       : "";
@@ -106,7 +107,7 @@ export class OpenAiCustomerWhatsAppAssistant {
   }
 
   private instructions(principal: WhatsAppAssistantPrincipal): string {
-    const attachmentGuidance = "Si el contexto seguro indica archivos adjuntos, confirma que se recibieron por nombre y pregunta si desean utilizarlos para preparar la cotización. Nunca digas que no puedes recibir o leer archivos, pero tampoco afirmes que su contenido ya fue analizado.";
+    const attachmentGuidance = "Si el contexto seguro indica archivos adjuntos, confirma que se recibieron por nombre. Nunca digas que no puedes recibir o leer archivos, pero no afirmes que su contenido fue analizado antes de ejecutar la tool correspondiente.";
     if (principal.audience === "UNKNOWN") {
       return [
         "Eres el asistente comercial de Tubería y Válvulas del Norte (Tuvansa) por WhatsApp.",
@@ -175,6 +176,14 @@ export class OpenAiCustomerWhatsAppAssistant {
       "Usa startNew=false para agregar o corregir la solicitud activa. Usa startNew=true solo si no hay solicitud activa o el cliente confirma que se trata de otra cotización independiente.",
       "Preguntas de estado, aceptación, rechazo o cambios de una cotización existente no crean una solicitud nueva.",
       "No afirmes que una acción ocurrió hasta recibir success=true de la tool.",
+      ...(principal.capabilities.includes("CUSTOMER_ONBOARDING") ? [
+        "Solo inicia un alta fiscal si confirm_quote_acceptance devuelve customerOnboarding o get_customer_onboarding confirma un expediente existente. No pidas datos fiscales antes.",
+        "Para continuar un alta fiscal consulta get_customer_onboarding. Solicita primero la Constancia de Situación Fiscal en PDF; si el cliente no puede enviarla, recopila gradualmente los campos indicados en missingFields.",
+        "Cuando el cliente escriba datos fiscales o de contacto, usa update_customer_onboarding. Envía null en lo no expresado; la actualización es incremental y nunca debes inventar datos.",
+        "Si existe un expediente fiscal y el cliente adjunta un PDF como Constancia de Situación Fiscal, usa process_customer_tax_document con el id exacto indicado en el contexto seguro. Después informa qué campos siguen pendientes.",
+        "Los campos fiscales mínimos son razón social exacta, RFC, régimen fiscal y código postal fiscal. También debe existir nombre de contacto y al menos correo o WhatsApp.",
+        "Cuando missingFields quede vacío, informa que el expediente quedó pendiente de revisión por su ejecutivo; nunca confirmes por tu cuenta el alta definitiva.",
+      ] : ["Este cliente ya está registrado en ERP. No solicites Constancia de Situación Fiscal ni otros datos para alta fiscal."]),
     ].join("\n");
   }
 
@@ -258,6 +267,22 @@ export class OpenAiCustomerWhatsAppAssistant {
         quoteNumber: { type: "string" }, requestedInformation: { type: "string", minLength: 3, maxLength: 2000 },
       }, ["quoteNumber", "requestedInformation"]),
       this.tool("contact_sales_representative", "Obtiene el ejecutivo responsable para orientar al cliente.", { quoteNumber: { type: "string" } }, ["quoteNumber"]),
+      ...(principal.capabilities.includes("CUSTOMER_ONBOARDING") ? [
+        this.tool("get_customer_onboarding", "Consulta el expediente fiscal activo y sus campos pendientes.", {}, []),
+        this.tool("process_customer_tax_document", "Procesa una Constancia de Situación Fiscal PDF adjunta y llena el borrador fiscal para revisión.", {
+          attachmentId: { type: "string" },
+        }, ["attachmentId"]),
+        this.tool("update_customer_onboarding", "Guarda datos fiscales o de contacto expresados por el cliente durante su alta.", {
+          legalName: { type: ["string", "null"] }, taxId: { type: ["string", "null"] }, taxRegime: { type: ["string", "null"] },
+          cfdiUse: { type: ["string", "null"] }, billingStreet: { type: ["string", "null"] },
+          billingExteriorNumber: { type: ["string", "null"] }, billingInteriorNumber: { type: ["string", "null"] },
+          billingNeighborhood: { type: ["string", "null"] }, billingCity: { type: ["string", "null"] },
+          billingState: { type: ["string", "null"] }, billingPostalCode: { type: ["string", "null"] },
+          billingCountry: { type: ["string", "null"] }, contactName: { type: ["string", "null"] },
+          contactEmail: { type: ["string", "null"] }, contactPhone: { type: ["string", "null"] },
+          contactWhatsapp: { type: ["string", "null"] },
+        }, ["legalName", "taxId", "taxRegime", "cfdiUse", "billingStreet", "billingExteriorNumber", "billingInteriorNumber", "billingNeighborhood", "billingCity", "billingState", "billingPostalCode", "billingCountry", "contactName", "contactEmail", "contactPhone", "contactWhatsapp"]),
+      ] : []),
     ];
   }
 

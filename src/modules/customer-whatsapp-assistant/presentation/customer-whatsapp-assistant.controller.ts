@@ -33,14 +33,16 @@ export class CustomerWhatsAppAssistantController {
     return typeof value === "string" ? value.trim() : "";
   }
 
-  private attachments(value: unknown): Array<{ originalName: string; mimeType: string }> {
+  private attachments(value: unknown): Array<{ id: string; originalName: string; mimeType: string }> {
     if (!Array.isArray(value)) return [];
     return value.slice(0, 10).flatMap((item) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return [];
       const candidate = item as Record<string, unknown>;
       const originalName = this.text(candidate.originalName).slice(0, 255);
-      if (!originalName) return [];
+      const id = this.text(candidate.id);
+      if (!id || !originalName) return [];
       return [{
+        id,
         originalName,
         mimeType: this.text(candidate.mimeType).slice(0, 120) || "application/octet-stream",
       }];
@@ -57,6 +59,7 @@ export class CustomerWhatsAppAssistantController {
     const allowedCapabilities = new Set<WhatsAppAssistantPrincipal["capabilities"][number]>([
       "CUSTOMER_QUOTES",
       "CUSTOMER_QUOTE_ACTIONS",
+      "CUSTOMER_ONBOARDING",
       "INTERNAL_VERIFICATION",
       "INTERNAL_REPORTS",
       "INTERNAL_QUOTES",

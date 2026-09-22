@@ -245,4 +245,38 @@ test("known customers receive quote request lifecycle tools", async () => {
     "close_whatsapp_quote_request",
   ]);
   assert.match(String(createInputs[0].instructions), /otra cotización independiente/);
+  assert.ok(!toolNames.includes("get_customer_onboarding"));
+  assert.doesNotMatch(String(createInputs[0].instructions), /Solicita primero la Constancia/);
+  assert.match(String(createInputs[0].instructions), /Este cliente ya está registrado en ERP/);
+});
+
+test("local customers can complete a fiscal onboarding after accepting a quote", async () => {
+  const createInputs: Record<string, unknown>[] = [];
+  const client = {
+    responses: {
+      create: async (input: Record<string, unknown>) => {
+        createInputs.push(input);
+        return { id: "resp-onboarding", output_text: "Envíame tu constancia fiscal.", output: [{ type: "message" }] };
+      },
+    },
+  };
+  const assistant = new OpenAiCustomerWhatsAppAssistant("test", "test-model", new ToolStub(), 4, client as never);
+
+  await assistant.respond({
+    turnId: "turn-onboarding",
+    conversationId: "conversation-local",
+    message: "Acepto la cotización",
+    mediaCount: 0,
+    previousResponseId: null,
+    principal: {
+      audience: "CUSTOMER",
+      isVerified: false,
+      capabilities: ["CUSTOMER_QUOTES", "CUSTOMER_QUOTE_ACTIONS", "CUSTOMER_ONBOARDING"],
+    },
+  });
+
+  const toolNames = (createInputs[0].tools as Array<{ name: string }>).map((tool) => tool.name);
+  assert.ok(toolNames.includes("get_customer_onboarding"));
+  assert.ok(toolNames.includes("process_customer_tax_document"));
+  assert.match(String(createInputs[0].instructions), /Solo inicia un alta fiscal si confirm_quote_acceptance devuelve customerOnboarding/);
 });

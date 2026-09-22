@@ -28,6 +28,16 @@ import { CoreCustomerAssistantToolGateway } from "../modules/customer-whatsapp-a
 import { OpenAiCustomerWhatsAppAssistant } from "../modules/customer-whatsapp-assistant/infrastructure/openai-customer-whatsapp-assistant";
 import { CustomerWhatsAppAssistantController } from "../modules/customer-whatsapp-assistant/presentation/customer-whatsapp-assistant.controller";
 import { CustomerWhatsAppAssistantRoutes } from "../modules/customer-whatsapp-assistant/presentation/customer-whatsapp-assistant.routes";
+import { ExtractCustomerTaxDocumentUseCase } from "../modules/ai-assistance/application/use-cases/extract-customer-tax-document.use-case";
+import { CustomerTaxDocumentController } from "../modules/ai-assistance/presentation/customer-tax-document.controller";
+import { CustomerTaxDocumentRoutes } from "../modules/ai-assistance/presentation/customer-tax-document.routes";
+import { DocumentTextExtractorAdapter } from "../modules/document-extraction/infrastructure/files/document-text-extractor.adapter";
+import { DocumentTypeDetector } from "../modules/document-extraction/infrastructure/files/document-type-detector";
+import { XlsxTextReader } from "../modules/document-extraction/infrastructure/files/xlsx-text-reader";
+import { PdfDigitalTextReader } from "../modules/document-extraction/infrastructure/files/pdf-digital-text-reader";
+import { PdfDigitalReconciliationService } from "../modules/document-extraction/infrastructure/files/pdf-digital-reconciliation.service";
+import { OpenAiPdfOcrTextReaderAdapter } from "../modules/document-extraction/infrastructure/openai-pdf-ocr-text-reader.adapter";
+import { OpenAiPartyDataProcessor } from "../modules/ai-assistance/infrastructure/openai-party-data.processor";
 
 export interface ApiRuntime {
   app: Express;
@@ -106,6 +116,23 @@ export function composeApi(config: ApiConfig): ApiRuntime {
       ),
     ),
   );
+  const taxDocumentOcr = config.pdfOcrEnabled
+    ? new OpenAiPdfOcrTextReaderAdapter(config.openAiApiKey, config.openAiOcrModel)
+    : undefined;
+  const taxDocumentRoutes = new CustomerTaxDocumentRoutes(
+    new CustomerTaxDocumentController(
+      new ExtractCustomerTaxDocumentUseCase(
+        new DocumentTextExtractorAdapter(
+          new DocumentTypeDetector(),
+          new XlsxTextReader(),
+          new PdfDigitalTextReader(new PdfDigitalReconciliationService()),
+          taxDocumentOcr,
+        ),
+        new OpenAiPartyDataProcessor(config.openAiApiKey, config.openAiModel),
+      ),
+    ),
+    config.maxUploadBytes,
+  );
 
   const app = express();
   app.disable("x-powered-by");
@@ -145,6 +172,7 @@ export function composeApi(config: ApiConfig): ApiRuntime {
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), catalogMaintenanceRoutes.build());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), catalogEvaluationRoutes.build());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), customerAssistantRoutes.build());
+  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), taxDocumentRoutes.build());
   app.use(errorHandler);
 
   return {
