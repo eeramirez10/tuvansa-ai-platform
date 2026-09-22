@@ -1,6 +1,12 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import path from "node:path";
 import { get } from "env-var";
+
+const environment = process.env.NODE_ENV?.trim().toLowerCase();
+if (environment === "development") {
+  dotenv.config({ path: ".env.development" });
+}
+dotenv.config();
 
 export interface BaseConfig {
   databaseUrl: string;

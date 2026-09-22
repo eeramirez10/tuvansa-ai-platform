@@ -79,6 +79,7 @@ export class ErpProductAvailabilityHttpAdapter implements ProductAvailabilityPor
         last: this.number(costs.last),
         currency: typeof costs.saleCurrency === "undefined" ? "MXN" : this.currency(costs.currency),
         saleCurrency: this.currency(costs.saleCurrency ?? costs.currency),
+        hasUsableCost: this.usableCost(costs),
       },
       totalStock: this.number(item.totalStock),
       availableInAnyBranch: Boolean(item.availableInAnyBranch),
@@ -106,6 +107,7 @@ export class ErpProductAvailabilityHttpAdapter implements ProductAvailabilityPor
         last: this.number(costs.last),
         currency: typeof costs.saleCurrency === "undefined" ? "MXN" : this.currency(costs.currency),
         saleCurrency: this.currency(costs.saleCurrency ?? costs.currency),
+        hasUsableCost: this.usableCost(costs),
       },
       totalStock: this.number(code.totalStock),
       availableInAnyBranch: Boolean(code.availableInAnyBranch),
@@ -145,6 +147,11 @@ export class ErpProductAvailabilityHttpAdapter implements ProductAvailabilityPor
   private number(value: unknown): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private usableCost(costs: Record<string, unknown>): boolean {
+    if (typeof costs.hasUsableCost === "boolean") return costs.hasUsableCost;
+    return Math.max(this.number(costs.average), this.number(costs.last)) > 0;
   }
 
   private currency(value: unknown): ProductAvailabilityCurrency {

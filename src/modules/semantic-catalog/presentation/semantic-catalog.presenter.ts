@@ -123,7 +123,12 @@ export class SemanticCatalogPresenter {
       const availability = result.availabilityByEan.get(match.ean) ?? null;
       const codes = availability?.codes ?? [];
       if (codes.length === 0) {
-        items.push(this.unresolvedQuoteItem(match, branchCode, source));
+        items.push(this.unresolvedQuoteItem(
+          match,
+          branchCode,
+          source,
+          result.availabilityStatus === "resolved" ? "NOT_FOUND" : "VALIDATION_UNAVAILABLE",
+        ));
         continue;
       }
 
@@ -147,7 +152,7 @@ export class SemanticCatalogPresenter {
             || left.resolvedBranchCode.localeCompare(right.resolvedBranchCode);
         });
       if (resolvedItems.length > 0) items.push(...resolvedItems);
-      else items.push(this.unresolvedQuoteItem(match, branchCode, source));
+      else items.push(this.catalogOnlyQuoteItem(match, codes[0], authorized, branchCode, source));
     }
 
     return {
@@ -182,6 +187,7 @@ export class SemanticCatalogPresenter {
       || this.metadataText(match.metadata, "normalizedDescription")
       || "";
     const originalDescription = this.metadataText(match.metadata, "originalDescription") ?? "";
+    const hasUsableCost = this.hasUsableCost(code);
 
     return {
       ...this.quoteMatch(match, resolvedBranchCode, source),
@@ -198,6 +204,8 @@ export class SemanticCatalogPresenter {
       eanTotalStock,
       branches: code.branches,
       authorized,
+      erpValidationStatus: hasUsableCost ? "FOUND_WITH_COST" : "FOUND_WITHOUT_COST",
+      hasUsableCost,
       branchProduct: {
         branchCode: resolvedBranchCode,
         branchName: resolvedBranchName,
@@ -214,6 +222,69 @@ export class SemanticCatalogPresenter {
         lastCost: code.costs.last,
         averageCostMxn: code.costs.average,
         lastCostMxn: code.costs.last,
+        hasUsableCost,
+        authorized,
+      },
+    };
+  }
+
+  private static catalogOnlyQuoteItem(
+    match: SemanticCatalogMatch,
+    code: ProductCodeAvailability,
+    authorizedWarehouseCodes: ReadonlySet<string>,
+    requestedBranchCode: string,
+    source: "proscai-catalog-v2" | "proscai-catalog-v2-semantic",
+  ) {
+    const description = code.description
+      || this.metadataText(match.metadata, "originalDescription")
+      || this.metadataText(match.metadata, "normalizedDescription")
+      || "";
+    const hasUsableCost = this.hasUsableCost(code);
+    const resolvedBranchCode = code.homeBranchCode ?? "";
+    const resolvedBranchName = code.homeBranchName
+      ?? BRANCH_NAMES[resolvedBranchCode]
+      ?? "";
+    const authorized = Boolean(resolvedBranchCode)
+      && authorizedWarehouseCodes.has(resolvedBranchCode);
+    const hasKnownHomeBranch = Boolean(resolvedBranchCode);
+    return {
+      ...this.quoteMatch(match, resolvedBranchCode || requestedBranchCode, source),
+      description,
+      originalDescription: this.metadataText(match.metadata, "originalDescription") ?? "",
+      branchProductCode: code.icod,
+      availableInBranch: false,
+      availableInAnyBranch: false,
+      registeredInBranch: false,
+      stockAvailableInBranch: false,
+      stockAvailableInAnyBranch: false,
+      resolvedBranchCode,
+      codeTotalStock: code.totalStock,
+      eanTotalStock: code.totalStock,
+      branches: [],
+      authorized,
+      erpValidationStatus: hasUsableCost && hasKnownHomeBranch
+        ? "FOUND_WITH_COST"
+        : hasUsableCost
+          ? "FOUND_WITHOUT_WAREHOUSE"
+          : "FOUND_WITHOUT_COST",
+      hasUsableCost,
+      branchProduct: {
+        branchCode: resolvedBranchCode,
+        branchName: resolvedBranchName,
+        id: `${match.id}:${code.icod}`,
+        code: code.icod,
+        ean: match.ean,
+        description,
+        stock: 0,
+        unit: code.unit,
+        currency: code.costs.saleCurrency,
+        saleCurrency: code.costs.saleCurrency,
+        costCurrency: code.costs.currency,
+        averageCost: code.costs.average,
+        lastCost: code.costs.last,
+        averageCostMxn: code.costs.average,
+        lastCostMxn: code.costs.last,
+        hasUsableCost,
         authorized,
       },
     };
@@ -223,6 +294,7 @@ export class SemanticCatalogPresenter {
     match: SemanticCatalogMatch,
     branchCode: string,
     source: "proscai-catalog-v2" | "proscai-catalog-v2-semantic",
+    erpValidationStatus: "NOT_FOUND" | "VALIDATION_UNAVAILABLE",
   ) {
     return {
       ...this.quoteMatch(match, branchCode, source),
@@ -239,8 +311,15 @@ export class SemanticCatalogPresenter {
       eanTotalStock: 0,
       branches: [],
       authorized: false,
+      erpValidationStatus,
+      hasUsableCost: false,
       branchProduct: null,
     };
+  }
+
+  private static hasUsableCost(code: ProductCodeAvailability): boolean {
+    return code.costs.hasUsableCost
+      ?? Math.max(code.costs.average, code.costs.last) > 0;
   }
 
   private static quoteMatch(

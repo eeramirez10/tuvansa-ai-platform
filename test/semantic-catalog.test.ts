@@ -302,6 +302,173 @@ test("quote semantic response expands ERP codes with assigned warehouse, stock, 
   assert.equal(response.items[0]?.stockAvailableInBranch, true);
 });
 
+test("quote semantic response keeps an ERP code without cost but marks it unusable", async () => {
+  const embeddings = new FakeEmbeddings();
+  const index = new FakeVectorIndex();
+  index.matches = [{
+    id: "variant-without-cost",
+    score: 0.91,
+    metadata: { ean: "750200", normalizedDescription: "VALVULA SIN COSTO" },
+  }];
+  const availability: ProductAvailability = {
+    ean: "750200",
+    productCode: "01002000",
+    sourceProductCodes: ["01002000"],
+    hasMultipleProductCodes: false,
+    description: "VALVULA SIN COSTO",
+    unit: "PZ",
+    costs: { average: 0, last: 0, currency: "MXN", saleCurrency: "MXN", hasUsableCost: false },
+    totalStock: 0,
+    availableInAnyBranch: false,
+    branches: [],
+    codes: [{
+      icod: "01002000",
+      homeBranchCode: "01",
+      homeBranchName: "MEXICO",
+      description: "VALVULA SIN COSTO",
+      unit: "PZ",
+      costs: { average: 0, last: 0, currency: "MXN", saleCurrency: "MXN", hasUsableCost: false },
+      totalStock: 0,
+      availableInAnyBranch: false,
+      branches: [],
+    }],
+  };
+  const result = await new SearchSemanticCatalogUseCase(
+    embeddings,
+    index,
+    new FakeAvailability([availability]),
+  ).execute({
+    query: "valvula",
+    candidateTopK: 30,
+    limit: 10,
+    filters: {},
+    includeAvailability: true,
+  });
+  const response = SemanticCatalogPresenter.quoteSearch("proscai-catalog-v2", {
+    query: "valvula",
+    branchCode: "15",
+    warehouseCodes: ["15"],
+    authorizedWarehouseCodes: ["15"],
+    candidateTopK: 30,
+    limit: 10,
+    filters: {},
+  }, result);
+
+  assert.equal(response.items[0]?.branchProductCode, "01002000");
+  assert.equal(response.items[0]?.branchProduct?.code, "01002000");
+  assert.equal(response.items[0]?.erpValidationStatus, "FOUND_WITHOUT_COST");
+  assert.equal(response.items[0]?.hasUsableCost, false);
+});
+
+test("quote semantic response infers Cancun from an ERP code without FALM rows", async () => {
+  const embeddings = new FakeEmbeddings();
+  const index = new FakeVectorIndex();
+  index.matches = [{
+    id: "variant-cancun-without-falm",
+    score: 0.92,
+    metadata: {
+      ean: "VB2AC/AIF446T150",
+      normalizedDescription: "VALVULA DE BOLA BRIDADA",
+    },
+  }];
+  const availability: ProductAvailability = {
+    ean: "VB2AC/AIF446T150",
+    productCode: "06401952",
+    sourceProductCodes: ["06401952"],
+    hasMultipleProductCodes: false,
+    description: "VALVULA DE BOLA BRIDADA",
+    unit: "PZ",
+    costs: {
+      average: 3275.9996,
+      last: 3275.9996,
+      currency: "MXN",
+      saleCurrency: "USD",
+      hasUsableCost: true,
+    },
+    totalStock: 0,
+    availableInAnyBranch: false,
+    branches: [],
+    codes: [{
+      icod: "06401952",
+      homeBranchCode: "06",
+      homeBranchName: "CANCUN",
+      description: "VALVULA DE BOLA BRIDADA",
+      unit: "PZ",
+      costs: {
+        average: 3275.9996,
+        last: 3275.9996,
+        currency: "MXN",
+        saleCurrency: "USD",
+        hasUsableCost: true,
+      },
+      totalStock: 0,
+      availableInAnyBranch: false,
+      branches: [],
+    }],
+  };
+  const result = await new SearchSemanticCatalogUseCase(
+    embeddings,
+    index,
+    new FakeAvailability([availability]),
+  ).execute({
+    query: "valvula de bola bridada",
+    candidateTopK: 30,
+    limit: 10,
+    filters: {},
+    includeAvailability: true,
+  });
+  const response = SemanticCatalogPresenter.quoteSearch("proscai-catalog-v2", {
+    query: "valvula de bola bridada",
+    branchCode: "06",
+    warehouseCodes: ["06"],
+    authorizedWarehouseCodes: ["06"],
+    candidateTopK: 30,
+    limit: 10,
+    filters: {},
+  }, result);
+
+  assert.equal(response.items[0]?.branchProductCode, "06401952");
+  assert.equal(response.items[0]?.resolvedBranchCode, "06");
+  assert.equal(response.items[0]?.branchProduct?.branchName, "CANCUN");
+  assert.equal(response.items[0]?.branchProduct?.stock, 0);
+  assert.equal(response.items[0]?.erpValidationStatus, "FOUND_WITH_COST");
+  assert.equal(response.items[0]?.authorized, true);
+});
+
+test("quote semantic response reports an EAN that no longer exists in ERP", async () => {
+  const embeddings = new FakeEmbeddings();
+  const index = new FakeVectorIndex();
+  index.matches = [{
+    id: "stale-variant",
+    score: 0.88,
+    metadata: { ean: "REMOVED-EAN", normalizedDescription: "PRODUCTO OBSOLETO" },
+  }];
+  const result = await new SearchSemanticCatalogUseCase(
+    embeddings,
+    index,
+    new FakeAvailability([]),
+  ).execute({
+    query: "producto obsoleto",
+    candidateTopK: 30,
+    limit: 10,
+    filters: {},
+    includeAvailability: true,
+  });
+  const response = SemanticCatalogPresenter.quoteSearch("proscai-catalog-v2", {
+    query: "producto obsoleto",
+    branchCode: "15",
+    warehouseCodes: ["15"],
+    authorizedWarehouseCodes: ["15"],
+    candidateTopK: 30,
+    limit: 10,
+    filters: {},
+  }, result);
+
+  assert.equal(response.items[0]?.erpValidationStatus, "NOT_FOUND");
+  assert.equal(response.items[0]?.branchProduct, null);
+  assert.equal(response.items[0]?.branchProductCode, "");
+});
+
 test("catalog dry run detects changes without embedding or mutating Pinecone", async () => {
   const embeddings = new FakeEmbeddings();
   const index = new FakeManageableVectorIndex();
