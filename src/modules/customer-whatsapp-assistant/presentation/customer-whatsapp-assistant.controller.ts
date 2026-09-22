@@ -71,6 +71,6 @@ export class CustomerWhatsAppAssistantController {
           typeof item === "string" && allowedCapabilities.has(item as WhatsAppAssistantPrincipal["capabilities"][number])
         ))
       : [];
-    return { audience, isVerified: input.isVerified === true, capabilities };
+    return { audience, isVerified: input.isVerified === true, sharedCustomerPhone: input.sharedCustomerPhone === true, capabilities };
   }
 }

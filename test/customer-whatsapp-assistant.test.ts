@@ -180,6 +180,27 @@ test("unknown numbers receive no data tools", async () => {
   assert.deepEqual(createInputs[0].tools, []);
 });
 
+test("shared customer phones must provide a folio and cannot list quotes or start onboarding", async () => {
+  const createInputs: Record<string, unknown>[] = [];
+  const client = { responses: { create: async (input: Record<string, unknown>) => {
+    createInputs.push(input);
+    return { id: "resp-shared", output_text: "¿Me compartes el folio de tu cotización?", output: [{ type: "message" }] };
+  } } };
+  const assistant = new OpenAiCustomerWhatsAppAssistant("test", "test-model", new ToolStub(), 4, client as never);
+
+  await assistant.respond({
+    turnId: "turn-shared", conversationId: "conversation-shared", message: "¿Cómo va mi cotización?",
+    mediaCount: 0, previousResponseId: null,
+    principal: { audience: "CUSTOMER", isVerified: false, sharedCustomerPhone: true, capabilities: ["CUSTOMER_QUOTES", "CUSTOMER_QUOTE_ACTIONS"] },
+  });
+
+  const names = (createInputs[0].tools as Array<{ name: string }>).map((tool) => tool.name);
+  assert.ok(names.includes("get_quote_details"));
+  assert.ok(!names.includes("list_customer_quotes"));
+  assert.ok(!names.includes("get_customer_onboarding"));
+  assert.match(String(createInputs[0].instructions), /solicita su folio/);
+});
+
 test("unknown numbers with lead intake can save prospect data but cannot access quotes", async () => {
   const createInputs: Record<string, unknown>[] = [];
   const client = {
