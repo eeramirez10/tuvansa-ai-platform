@@ -63,6 +63,7 @@ export class CustomerWhatsAppAssistantController {
       "INTERNAL_VERIFICATION",
       "INTERNAL_REPORTS",
       "INTERNAL_QUOTES",
+      "INTERNAL_ONBOARDINGS",
       "LEAD_INTAKE",
       "QUOTE_REQUESTS",
     ]);
