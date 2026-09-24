@@ -123,7 +123,35 @@ test("acknowledges inbound files by name without claiming they cannot be read", 
   assert.match(initialInput[0].content, /materiales\.xlsx/);
   assert.match(initialInput[0].content, /preparar una cotización/);
   assert.doesNotMatch(initialInput[0].content, /lectura de archivos todavía no está habilitada/i);
-  assert.match(String(createInputs[0].instructions), /Nunca digas que no puedes recibir o leer archivos/);
+  assert.match(String(createInputs[0].instructions), /Nunca digas que no puedes recibir o leer documentos e imágenes/);
+});
+
+test("voice notes are not presented as unnamed quote files", async () => {
+  const createInputs: Record<string, unknown>[] = [];
+  const client = {
+    responses: {
+      create: async (input: Record<string, unknown>) => {
+        createInputs.push(input);
+        return { id: "resp-audio", output_text: "Por ahora no puedo recibir notas de voz. ¿Podrías escribirme tu solicitud?", output: [{ type: "message" }] };
+      },
+    },
+  };
+  const assistant = new OpenAiCustomerWhatsAppAssistant("test", "test-model", new ToolStub(), 4, client as never);
+
+  await assistant.respond({
+    turnId: "turn-audio",
+    conversationId: "conversation-audio",
+    message: "Nota de voz recibida (no compatible)",
+    mediaCount: 1,
+    hasUnsupportedAudio: true,
+    attachments: [],
+    previousResponseId: null,
+    principal: { audience: "CUSTOMER", isVerified: false, capabilities: ["CUSTOMER_QUOTES"] },
+  });
+
+  const initialInput = createInputs[0].input as Array<{ content: string }>;
+  assert.match(initialInput[0].content, /No aceptamos ni transcribimos audios/);
+  assert.doesNotMatch(initialInput[0].content, /nombre pendiente de sincronización|archivo\(s\)/i);
 });
 
 test("unverified internal users only receive verification tools", async () => {
@@ -286,7 +314,7 @@ test("known customers receive quote request lifecycle tools", async () => {
   assert.match(String(createInputs[0].instructions), /Este cliente ya está registrado en ERP/);
 });
 
-test("local customers can complete a fiscal onboarding after accepting a quote", async () => {
+test("local customers can send a fiscal PDF for seller review after accepting a quote", async () => {
   const createInputs: Record<string, unknown>[] = [];
   const client = {
     responses: {
@@ -313,6 +341,7 @@ test("local customers can complete a fiscal onboarding after accepting a quote",
 
   const toolNames = (createInputs[0].tools as Array<{ name: string }>).map((tool) => tool.name);
   assert.ok(toolNames.includes("get_customer_onboarding"));
-  assert.ok(toolNames.includes("process_customer_tax_document"));
+  assert.ok(!toolNames.includes("process_customer_tax_document"));
   assert.match(String(createInputs[0].instructions), /Solo inicia un alta fiscal si confirm_quote_acceptance devuelve customerOnboarding/);
+  assert.match(String(createInputs[0].instructions), /su ejecutivo lo revisará antes de extraer los datos/);
 });

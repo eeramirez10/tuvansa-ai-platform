@@ -10,6 +10,7 @@ export class CustomerWhatsAppAssistantController {
     const conversationId = this.text(req.body?.conversationId);
     const message = this.text(req.body?.message);
     const mediaCount = typeof req.body?.mediaCount === "number" ? Math.max(0, Math.trunc(req.body.mediaCount)) : 0;
+    const hasUnsupportedAudio = req.body?.hasUnsupportedAudio === true;
     const attachments = this.attachments(req.body?.attachments);
     const previousResponseId = this.text(req.body?.previousResponseId) || null;
     const principal = this.principal(req.body?.principal);
@@ -22,6 +23,7 @@ export class CustomerWhatsAppAssistantController {
       conversationId,
       message,
       mediaCount,
+      hasUnsupportedAudio,
       attachments,
       previousResponseId,
       principal,
