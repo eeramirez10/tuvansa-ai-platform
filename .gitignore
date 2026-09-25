@@ -7,3 +7,6 @@ src/generated/
 storage/
 coverage/
 .DS_Store
+
+!.env.staging.example
+!.env.staging.postgres.example
