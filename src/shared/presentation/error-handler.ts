@@ -23,6 +23,7 @@ export function errorHandler(
   }
 
   const message = error instanceof Error ? error.message : "Unexpected error.";
-  console.error(JSON.stringify({ level: "error", message }));
+  const cause = error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined;
+  console.error(JSON.stringify({ level: "error", message, ...(cause ? { cause } : {}) }));
   res.status(500).json({ error: "Unexpected AI platform error.", code: "UNEXPECTED_ERROR" });
 }

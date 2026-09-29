@@ -12,6 +12,49 @@ class ToolStub extends CustomerAssistantToolPort {
   }
 }
 
+test("first greeting for a known contact uses a local-only name marker", async () => {
+  const requests: Record<string, unknown>[] = [];
+  const client = { responses: { create: async (request: Record<string, unknown>) => {
+    requests.push(request);
+    return { id: "resp-greeting", output_text: "¡Hola, {{CONTACT_NAME}}! Soy el asistente de Tuvansa.", output: [{ type: "message" }] };
+  } } };
+  const assistant = new OpenAiCustomerWhatsAppAssistant("test", "test-model", new ToolStub(), 4, client as never);
+  await assistant.respond({
+    turnId: "turn-greeting",
+    conversationId: "conversation-greeting",
+    message: "Hola",
+    mediaCount: 0,
+    previousResponseId: null,
+    isFirstAssistantTurn: true,
+    principal: { audience: "CUSTOMER", isVerified: false, hasKnownContactName: true, capabilities: ["CUSTOMER_QUOTES"] },
+  });
+  assert.match(String(requests[0].instructions), /\{\{CONTACT_NAME\}\}/);
+  assert.match(String(requests[0].instructions), /sustituirá localmente/);
+});
+
+test("new numbers receive a generic welcome and later turns do not repeat it", async () => {
+  const requests: Record<string, unknown>[] = [];
+  const client = { responses: { create: async (request: Record<string, unknown>) => {
+    requests.push(request);
+    return { id: `resp-${requests.length}`, output_text: "¿En qué puedo ayudarte?", output: [{ type: "message" }] };
+  } } };
+  const assistant = new OpenAiCustomerWhatsAppAssistant("test", "test-model", new ToolStub(), 4, client as never);
+  const base = {
+    turnId: "turn-new",
+    conversationId: "conversation-new",
+    message: "Hola",
+    mediaCount: 0,
+    previousResponseId: null,
+    principal: { audience: "UNKNOWN" as const, isVerified: false, capabilities: ["LEAD_INTAKE" as const] },
+  };
+  await assistant.respond({ ...base, isFirstAssistantTurn: true });
+  await assistant.respond({ ...base, previousResponseId: "resp-1", isFirstAssistantTurn: false });
+  assert.match(String(requests[0].instructions), /Bienvenido a Tuvansa/);
+  assert.doesNotMatch(String(requests[0].instructions), /\{\{CONTACT_NAME\}\}/);
+  assert.match(String(requests[1].instructions), /No repitas la bienvenida/);
+  assert.doesNotMatch(String(requests[1].instructions), /Bienvenido a Tuvansa/);
+});
+
 test("uses Responses API function tools before answering with quote data", async () => {
   const responses = [
     {

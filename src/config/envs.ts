@@ -5,8 +5,9 @@ import { get } from "env-var";
 const environment = process.env.NODE_ENV?.trim().toLowerCase();
 if (environment === "development") {
   dotenv.config({ path: ".env.development" });
+} else {
+  dotenv.config();
 }
-dotenv.config();
 
 export interface BaseConfig {
   databaseUrl: string;

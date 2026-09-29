@@ -26,6 +26,7 @@ export class CustomerWhatsAppAssistantController {
       hasUnsupportedAudio,
       attachments,
       previousResponseId,
+      isFirstAssistantTurn: req.body?.isFirstAssistantTurn === true,
       principal,
     });
     res.status(200).json(result);
@@ -74,6 +75,13 @@ export class CustomerWhatsAppAssistantController {
           typeof item === "string" && allowedCapabilities.has(item as WhatsAppAssistantPrincipal["capabilities"][number])
         ))
       : [];
-    return { audience, isVerified: input.isVerified === true, sharedCustomerPhone: input.sharedCustomerPhone === true, capabilities };
+    const sharedCustomerPhone = input.sharedCustomerPhone === true;
+    return {
+      audience,
+      isVerified: input.isVerified === true,
+      sharedCustomerPhone,
+      hasKnownContactName: audience === "CUSTOMER" && !sharedCustomerPhone && input.hasKnownContactName === true,
+      capabilities,
+    };
   }
 }
