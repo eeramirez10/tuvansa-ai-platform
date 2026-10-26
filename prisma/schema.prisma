@@ -73,3 +73,26 @@ model AiJobRun {
   @@index([jobId, attempt])
   @@map("ai_job_runs")
 }
+
+model SatCatalogEntry {
+  code         String    @id @db.VarChar(8)
+  description  String    @db.Text
+  similarWords String    @default("") @map("similar_words") @db.Text
+  searchText   String    @map("search_text") @db.Text
+  preferred    Boolean   @default(false)
+  validFrom    DateTime? @map("valid_from") @db.Timestamp(3)
+  validTo      DateTime? @map("valid_to") @db.Timestamp(3)
+
+  @@index([preferred], map: "sat_catalog_entries_preferred_idx")
+  @@map("sat_catalog_entries")
+}
+
+model SatCatalogImport {
+  id                 Boolean   @id @default(true)
+  sourceSha256       String    @map("source_sha256") @db.VarChar(64)
+  catalogPublishedAt DateTime? @map("catalog_published_at") @db.Timestamp(3)
+  importedAt         DateTime  @default(now()) @map("imported_at") @db.Timestamp(3)
+  rowCount           Int       @map("row_count")
+
+  @@map("sat_catalog_imports")
+}

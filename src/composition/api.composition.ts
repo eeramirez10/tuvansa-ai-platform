@@ -38,6 +38,8 @@ import { PdfDigitalTextReader } from "../modules/document-extraction/infrastruct
 import { PdfDigitalReconciliationService } from "../modules/document-extraction/infrastructure/files/pdf-digital-reconciliation.service";
 import { OpenAiPdfOcrTextReaderAdapter } from "../modules/document-extraction/infrastructure/openai-pdf-ocr-text-reader.adapter";
 import { OpenAiPartyDataProcessor } from "../modules/ai-assistance/infrastructure/openai-party-data.processor";
+import { createSatCatalogRoutes } from "../modules/sat-catalog/sat-catalog";
+import { OpenAiErpClassificationSuggester } from "../modules/ai-assistance/infrastructure/openai-erp-classification.suggester";
 
 export interface ApiRuntime {
   app: Express;
@@ -133,6 +135,7 @@ export function composeApi(config: ApiConfig): ApiRuntime {
     ),
     config.maxUploadBytes,
   );
+  const erpClassificationSuggester = new OpenAiErpClassificationSuggester(config.openAiApiKey, config.openAiModel);
 
   const app = express();
   app.disable("x-powered-by");
@@ -173,6 +176,10 @@ export function composeApi(config: ApiConfig): ApiRuntime {
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), catalogEvaluationRoutes.build());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), customerAssistantRoutes.build());
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), taxDocumentRoutes.build());
+  app.use("/api", internalApiKeyMiddleware(config.internalApiKey), createSatCatalogRoutes(prisma));
+  app.post("/api/erp-product-classifications/suggest", internalApiKeyMiddleware(config.internalApiKey), async (req, res) => {
+    res.json(await erpClassificationSuggester.suggest(req.body));
+  });
   app.use(errorHandler);
 
   return {
