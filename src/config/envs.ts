@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import path from "node:path";
 import { get } from "env-var";
+import { assertStagingAiConfig } from "./staging-safety";
 
 const environment = process.env.NODE_ENV?.trim().toLowerCase();
 if (environment === "development") {
@@ -8,6 +9,8 @@ if (environment === "development") {
 } else {
   dotenv.config();
 }
+
+assertStagingAiConfig(process.env);
 
 export interface BaseConfig {
   databaseUrl: string;

@@ -40,6 +40,7 @@ import { OpenAiPdfOcrTextReaderAdapter } from "../modules/document-extraction/in
 import { OpenAiPartyDataProcessor } from "../modules/ai-assistance/infrastructure/openai-party-data.processor";
 import { createSatCatalogRoutes } from "../modules/sat-catalog/sat-catalog";
 import { OpenAiErpClassificationSuggester } from "../modules/ai-assistance/infrastructure/openai-erp-classification.suggester";
+import { OpenAiErpEanExtractor } from "../modules/ai-assistance/infrastructure/openai-erp-ean.extractor";
 
 export interface ApiRuntime {
   app: Express;
@@ -179,6 +180,10 @@ export function composeApi(config: ApiConfig): ApiRuntime {
   app.use("/api", internalApiKeyMiddleware(config.internalApiKey), createSatCatalogRoutes(prisma));
   app.post("/api/erp-product-classifications/suggest", internalApiKeyMiddleware(config.internalApiKey), async (req, res) => {
     res.json(await erpClassificationSuggester.suggest(req.body));
+  });
+  const erpEanExtractor = new OpenAiErpEanExtractor(config.openAiApiKey, config.openAiModel);
+  app.post("/api/erp-product-ean/extract", internalApiKeyMiddleware(config.internalApiKey), async (req, res) => {
+    res.json(await erpEanExtractor.extract(req.body));
   });
   app.use(errorHandler);
 

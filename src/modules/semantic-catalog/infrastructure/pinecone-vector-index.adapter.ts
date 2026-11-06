@@ -1,11 +1,12 @@
 import { Index, Pinecone, RecordMetadata } from "@pinecone-database/pinecone";
 import { ManageableVectorIndexPort, VectorRecord } from "../application/ports/vector-index.port";
 import { VectorMatch, VectorMetadata } from "../domain/semantic-catalog.types";
+import { assertStagingVectorWrite } from "../../../config/staging-safety";
 
 export class PineconeVectorIndexAdapter implements ManageableVectorIndexPort {
   private readonly index: Index<RecordMetadata>;
 
-  constructor(apiKey: string, indexName: string, namespace: string) {
+  constructor(apiKey: string, indexName: string, private readonly namespace: string) {
     const client = new Pinecone({ apiKey });
     const index = client.Index<RecordMetadata>(indexName);
     this.index = namespace ? index.namespace(namespace) : index;
@@ -31,6 +32,7 @@ export class PineconeVectorIndexAdapter implements ManageableVectorIndexPort {
   }
 
   public async upsert(records: VectorRecord[]): Promise<void> {
+    assertStagingVectorWrite(this.namespace);
     if (records.length === 0) return;
     await this.index.upsert(records.map((record) => ({
       id: record.id,
@@ -40,6 +42,7 @@ export class PineconeVectorIndexAdapter implements ManageableVectorIndexPort {
   }
 
   public async delete(ids: string[]): Promise<void> {
+    assertStagingVectorWrite(this.namespace);
     if (ids.length === 0) return;
     await this.index.deleteMany(ids);
   }
