@@ -1,5 +1,12 @@
 # Tuvansa AI Platform
 
+## Development workflow
+
+Read [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md) and [AGENTS.md](AGENTS.md)
+before changing this project. Create all work branches from `development` and
+promote through `development -> staging -> main`. Production promotion requires
+approval of the same commits in staging; deployment is manual.
+
 Unified backend for Tuvansa AI capabilities. It uses a modular monolith with Clean Architecture and runs as two independent processes:
 
 - `api`: validates requests, persists jobs and publishes queue messages.
