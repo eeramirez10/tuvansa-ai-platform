@@ -58,13 +58,14 @@ export function composeApi(config: ApiConfig): ApiRuntime {
   });
   const repository = new PrismaAiJobRepository(prisma);
   const storage = new LocalDocumentStorageAdapter(config.documentStorageDirectory);
-  const createTextJob = new CreateTextExtractionJobUseCase(repository, queue, config.promptVersion);
+  const quotePromptVersion = `${config.promptVersion}:customer-reference-v1`;
+  const createTextJob = new CreateTextExtractionJobUseCase(repository, queue, quotePromptVersion);
   const createDocumentJob = new CreateDocumentExtractionJobUseCase(
     repository,
     queue,
     storage,
     {
-      quoteDocument: config.promptVersion,
+      quoteDocument: quotePromptVersion,
       quotedExcel: config.quotedExcelPromptVersion,
       supplierQuote: config.supplierQuotePromptVersion,
     },

@@ -1,3 +1,4 @@
+import { groundedCustomerReference } from "../domain/customer-reference";
 import OpenAI from "openai";
 import {
   QuoteTextExtraction,
@@ -5,7 +6,7 @@ import {
 } from "../application/ports/quote-text-extractor.port";
 import {
   DetectedLanguage,
-  ERP_MEASUREMENT_UNITS,
+  QUOTE_MEASUREMENT_UNITS,
   QuoteItem,
 } from "../domain/quote-item.entity";
 import { LanguageDetectorService } from "./normalization/language-detector.service";
@@ -21,7 +22,7 @@ export class OpenAiQuoteTextExtractorAdapter implements QuoteTextExtractorPort {
   constructor(
     apiKey: string,
     private readonly model: string,
-    private readonly unitNormalizer = new UnitNormalizerService(),
+    private readonly unitNormalizer = new UnitNormalizerService(true),
     private readonly quantityNormalizer = new QuantityNormalizerService(),
     private readonly languageDetector = new LanguageDetectorService(),
   ) {
@@ -44,9 +45,10 @@ export class OpenAiQuoteTextExtractorAdapter implements QuoteTextExtractorPort {
           schema: {
             type: "object",
             additionalProperties: false,
-            required: ["items", "customer"],
+            required: ["items", "customer", "customer_reference"],
             properties: {
               customer: this.customerSchema(),
+              customer_reference: { type: ["string", "null"] },
               items: {
                 type: "array",
                 items: {
@@ -68,7 +70,7 @@ export class OpenAiQuoteTextExtractorAdapter implements QuoteTextExtractorPort {
                     unidad_original: { type: ["string", "null"] },
                     unidad_normalizada: {
                       type: ["string", "null"],
-                      enum: [...ERP_MEASUREMENT_UNITS, null]
+                      enum: [...QUOTE_MEASUREMENT_UNITS, null]
                     },
                     idioma: { type: "string", enum: ["es", "en", "mixed"] },
                     requiere_revision: { type: "boolean" }
@@ -88,6 +90,7 @@ export class OpenAiQuoteTextExtractorAdapter implements QuoteTextExtractorPort {
     return {
       items: this.parseItems(parsed),
       customer: this.parseCustomer(parsed),
+      customerReference: groundedCustomerReference((parsed as Record<string, unknown>).customer_reference, text),
       usage: {
         provider: "openai",
         model: this.model,
@@ -278,11 +281,13 @@ export class OpenAiQuoteTextExtractorAdapter implements QuoteTextExtractorPort {
       "Use compact commercial notation such as 6\" X 4\" CED. 10S. Example: ECCENTRIC REDUCER A403-WP316/316L-S BW 6\" X 4\" CED. 10S.",
       "Treat zero, dashes and blank technical cells as absent. Do not append item identifiers, quantity or sales unit to the product description.",
       "For STRUCTURED_TABLE_ROWS, join DESCRIPTION and DESCRIPTION_SUFFIX naturally in both description_original and description_normalizada, removing duplicated words or specifications. Keep UNIT and QUANTITY only in their dedicated fields.",
-      "Ignore headers, commercial conditions, prices, taxes, totals, signatures and non-product text.",
+      "Ignore headers, commercial conditions, prices, taxes, totals and signatures when extracting line items.",
+      "In customer_reference, copy the exact value of a single explicitly stated reference that identifies the customer request. Look for Referencia del cliente, Su referencia, RFQ, Solicitud, Requisición or Proyecto in the header or message.",
+      "Prefer an explicitly labeled customer reference, then a labeled RFQ/request number, then a labeled project. Do not use the seller quotation number, an ERP folio, product code, a supplier reference, or a generic subject. Return null when competing values of the same priority exist, when absent, or when longer than 120 characters. Do not guess.",
       "In customer, extract the company or person requesting the quotation only when explicitly identifiable; never return TUVANSA or the seller as customer.",
       "Separate customer contacts and address fields. Use null for customer when identity is not supported by the content.",
       "Do not invent quantity or unit.",
-      "unidad_normalizada must use only the ERP codes PZ, K, M, ML, L, TR, SE, ACT, FT, XRO, UNO, M2, LOT or CON.",
+      "unidad_normalizada must use only PZ, K, TON (metric tonne), M, ML, L, TR, SE, ACT, FT, XRO, UNO, M2, LOT or CON.",
       "Keep the source order.",
       "When EXTRACTION_HINTS are present, use them to reconcile each structured row with its description, technical attributes, quantity and unit.",
       "Use requiere_revision=true when quantity or normalized unit is missing."

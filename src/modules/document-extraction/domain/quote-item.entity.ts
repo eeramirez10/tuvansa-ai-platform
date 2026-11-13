@@ -15,7 +15,8 @@ export const ERP_MEASUREMENT_UNITS = [
   "LOT",
   "CON",
 ] as const;
-export type CanonicalUnit = (typeof ERP_MEASUREMENT_UNITS)[number];
+export const QUOTE_MEASUREMENT_UNITS = [...ERP_MEASUREMENT_UNITS, "TON"] as const;
+export type CanonicalUnit = (typeof QUOTE_MEASUREMENT_UNITS)[number];
 
 export interface QuoteItemProps {
   descriptionOriginal: string;

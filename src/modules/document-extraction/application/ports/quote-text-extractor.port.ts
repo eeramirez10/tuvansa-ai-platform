@@ -12,6 +12,7 @@ export interface AiUsage {
 export interface QuoteTextExtraction {
   items: QuoteItem[];
   customer: ExtractedPartyData | null;
+  customerReference: string | null;
   usage: AiUsage;
 }
 

@@ -25,10 +25,13 @@ export class UnitNormalizerService {
     ["jgo", "CON"], ["juego", "CON"], ["juegos", "CON"], ["set", "CON"], ["sets", "CON"],
   ]);
 
+  constructor(private readonly allowTonne = false) {}
+
   public normalize(input: unknown): CanonicalUnit | null {
     if (typeof input !== "string") return null;
     const cleaned = this.clean(input);
     if (!cleaned) return null;
+    if (this.allowTonne && ["ton", "tonelada", "toneladas"].includes(cleaned)) return "TON";
     return this.unitMap.get(cleaned) ?? this.unitMap.get(cleaned.replace(/\s+/g, "")) ?? null;
   }
 
@@ -37,6 +40,7 @@ export class UnitNormalizerService {
     const explicitWords = [
       "pieza", "piezas", "pza", "pzas", "kilo", "kilos", "kilogramo", "kilogramos",
       "metro lineal", "metros lineales", "metro", "metros", "litro", "litros", "tramo", "tramos", "tmo", "tmos",
+      ...(this.allowTonne ? ["ton", "tonelada", "toneladas"] : []),
       "servicio", "servicios", "actividad", "actividades", "pie", "pies", "rollo", "rollos",
       "unidad", "unidades", "metro cuadrado", "metros cuadrados", "lote", "lotes",
       "conjunto", "conjuntos", "juego", "juegos",
